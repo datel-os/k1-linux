@@ -53,6 +53,22 @@ void __cpuidle r4k_wait_irqoff(void)
 }
 
 /*
+ * Ingenic's kernel waits on the XBurst2 with interrupts disabled, which
+ * relies on the core waking up for an interrupt that is not enabled, and
+ * empties the write buffer first.
+ */
+static void __cpuidle xburst2_wait_irqoff(void)
+{
+	if (!need_resched())
+		__asm__(
+		"	.set	push		\n"
+		"	.set	arch=r4000	\n"
+		"	sync			\n"
+		"	wait			\n"
+		"	.set	pop		\n");
+}
+
+/*
  * The RM7000 variant has to handle erratum 38.	 The workaround is to not
  * have any pending stores when the WAIT instruction is executed.
  */
@@ -159,6 +175,9 @@ void __init check_wait(void)
 	case CPU_XBURST:
 	case CPU_LOONGSON32:
 		cpu_wait = r4k_wait;
+		break;
+	case CPU_XBURST2:
+		cpu_wait = xburst2_wait_irqoff;
 		break;
 	case CPU_LOONGSON64:
 		if ((c->processor_id & (PRID_IMP_MASK | PRID_REV_MASK)) >=

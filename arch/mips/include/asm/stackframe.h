@@ -427,7 +427,9 @@
 
 		.macro	RESTORE_SP_AND_RET docfi=0
 		RESTORE_SP \docfi
-#if defined(CONFIG_CPU_MIPSR5) || defined(CONFIG_CPU_MIPSR6)
+/* The XBurst2 is a release 5 CPU without ERETNC */
+#if (defined(CONFIG_CPU_MIPSR5) && !defined(CONFIG_MACH_XBURST2)) || \
+    defined(CONFIG_CPU_MIPSR6)
 		eretnc
 #else
 		.set	push
