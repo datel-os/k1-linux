@@ -307,6 +307,75 @@ struct ingenic_clk_reg_sleep x2000_clk_reg_sleep[] = {
 
 unsigned int x2000_nr_clk_reg_sleep = ARRAY_SIZE(x2000_clk_reg_sleep);
 
+#if CONFIG_CLK_X2000_CPU_MHZ
+static void __init x2000_cpccr_write(void __iomem *base, u32 val, bool dividers)
+{
+	int i;
+
+	/* bit 22: take over the CPU and L2 cache dividers; CPCSR bit 0: busy */
+	writel(dividers ? val | BIT(22) : val, base + CPM_CPCCR);
+	for (i = 0; dividers && i < 1000000 && (readl(base + CPM_CPCSR) & 1); i++)
+		;
+	writel(val, base + CPM_CPCCR);
+}
+
+/*
+ * Runs the CPU from the APLL at CONFIG_CLK_X2000_CPU_MHZ. The CPU waits on
+ * MPLL / 2 while the APLL relocks. Nothing is touched unless the registers
+ * are as the boot loaders leave them: the CPU on the undivided APLL, the
+ * buses on the MPLL, the APLL at 24 MHz times its feedback divider.
+ */
+static void __init x2000_set_cpu_clock(void __iomem *base)
+{
+	const u32 mhz = CONFIG_CLK_X2000_CPU_MHZ;
+	u32 cpccr = readl(base + CPM_CPCCR);
+	u32 apll = readl(base + CPM_CPAPCR), mpll = readl(base + CPM_CPMPCR);
+	/* reference divider - 1 in bits 19:14, output divider code in 13:11 */
+	u32 mpll_mhz = 24 * 2 * (((mpll >> 20) & 0x1ff) + 1) /
+		((((mpll >> 14) & 0x3f) + 1) * (1 << ((mpll >> 11) & 7)));
+	int i;
+
+	if (mhz == 24 * (((apll >> 20) & 0x1ff) + 1))
+		return;
+	if (mhz % 24 || mhz < 600 || mhz > 1200 ||
+	    (cpccr & 0xff) != 0x10 ||		/* CPU / 1, L2 cache / 2 */
+	    ((cpccr >> 28) & 3) != 1 ||		/* CPU from the APLL */
+	    ((cpccr >> 26) & 3) == 1 || ((cpccr >> 24) & 3) == 1 ||	/* buses */
+	    ((apll >> 14) & 0x3f) != 0 || ((apll >> 11) & 7) != 1 ||
+	    mpll_mhz < 1200 || mpll_mhz > 2400) {
+		pr_warn("x2000: CPU clock left alone (wanted %u MHz, CPCCR %08x, CPAPCR %08x, CPMPCR %08x)\n",
+			mhz, cpccr, apll, mpll);
+		return;
+	}
+
+	/* to MPLL / 2: the dividers first, then the source */
+	cpccr = (cpccr & ~0xffu) | 0x31;
+	x2000_cpccr_write(base, cpccr, true);
+	cpccr = (cpccr & ~(3u << 28)) | 2u << 28;
+	x2000_cpccr_write(base, cpccr, false);
+
+	/* the APLL: off, the new feedback divider, wait for the lock (bit 3) */
+	apll = (apll & ~(0x1ffu << 20)) | (mhz / 24 - 1) << 20 | 1;
+	writel(0, base + CPM_CPAPCR);
+	writel(apll, base + CPM_CPAPCR);
+	for (i = 0; i < 10000000 && !(readl(base + CPM_CPAPCR) & BIT(3)); i++)
+		;
+	if (!(readl(base + CPM_CPAPCR) & BIT(3))) {
+		pr_err("x2000: the APLL did not lock at %u MHz, the CPU stays on MPLL / 2\n", mhz);
+		return;
+	}
+
+	/* back to the APLL: the source first, then the dividers */
+	cpccr = (cpccr & ~(3u << 28)) | 1u << 28;
+	x2000_cpccr_write(base, cpccr, false);
+	cpccr = (cpccr & ~0xffu) | 0x10;
+	x2000_cpccr_write(base, cpccr, true);
+	pr_info("x2000: CPU clock set to %u MHz\n", mhz);
+}
+#else
+static inline void x2000_set_cpu_clock(void __iomem *base) { }
+#endif
+
 /* Register x2000 clocks. */
 static void __init x2000_clk_init(struct device_node *np)
 {
@@ -330,6 +399,9 @@ static void __init x2000_clk_init(struct device_node *np)
 	/* Register Ext Clocks From DT */
 	ingenic_clk_of_register_fixed_ext(ctx, x2000_fixed_rate_ext_clks,
 	                                  ARRAY_SIZE(x2000_fixed_rate_ext_clks), ext_clk_match);
+
+	/* Before the clocks read their rates from the registers */
+	x2000_set_cpu_clock(reg_base);
 
 	/* Register PLLs. */
 	ingenic_clk_register_pll(ctx, x2000_pll_clks,
