@@ -1,0 +1,511 @@
+/*
+ *  Copyright (C) 2017, bo.liu <bo.liu@ingenic.com>
+ *  ingenic Watchdog driver
+ *
+ *  This program is free software; you can redistribute it and/or modify it
+ *  under  the terms of the GNU General  Public License as published by the
+ *  Free Software Foundation;  either version 2 of the License, or (at your
+ *  option) any later version.
+ *
+ *  You should have received a copy of the GNU General Public License along
+ *  with this program; if not, write to the Free Software Foundation, Inc.,
+ *  675 Mass Ave, Cambridge, MA 02139, USA.
+ *
+ */
+
+#include <linux/module.h>
+#include <linux/moduleparam.h>
+#include <linux/types.h>
+#include <linux/kernel.h>
+#include <linux/miscdevice.h>
+#include <linux/watchdog.h>
+#include <linux/init.h>
+#include <linux/platform_device.h>
+#include <linux/reboot.h>
+#include <linux/io.h>
+#include <linux/device.h>
+#include <linux/clk.h>
+#include <linux/slab.h>
+#include <linux/err.h>
+#include <linux/interrupt.h>
+#include <linux/sched/debug.h>
+#include <linux/nmi.h>
+#include <linux/of.h>
+#include <soc/cpm.h>
+#include "ingenic_wdt.h"
+
+#define IRQ_SWITCH  0
+//#define WDT_DEBUG
+
+static  void wdt_set_half_and_full(struct ingenic_wdt_drvdata *drvdata, unsigned int value, char ch);
+
+static bool nowayout = WATCHDOG_NOWAYOUT;
+module_param(nowayout, bool, 0);
+MODULE_PARM_DESC(nowayout,
+                 "Watchdog cannot be stopped once started (default="
+                 __MODULE_STRING(WATCHDOG_NOWAYOUT) ")");
+
+/* NebulaOS G117(b): read-only marker that this driver arms with a programmed
+ * timeout (ingenic_wdt_program); /sys/module/ingenic_wdt/parameters/
+ * nebulaos_arm_fix = Y. The Hardware Agent's watchdog-arm exercise refuses a
+ * kernel without it (the vendor start() could reset the printer at once). */
+static bool nebulaos_arm_fix = true;
+module_param(nebulaos_arm_fix, bool, 0444);
+MODULE_PARM_DESC(nebulaos_arm_fix, "start() programs the timeout before enabling (read-only)");
+
+/* NebulaOS black box (Run 24, 2026-11-06): why the SoC last reset, read
+ * from the CPM reset status register at probe and then cleared, so every
+ * boot reports only its own reset. /sys/module/ingenic_wdt/parameters/
+ * nebulaos_reset_rsr: bit 0 PR (reset pin), bit 1 WR (watchdog - also how
+ * the platform does every software restart and the panic restart,
+ * soc-x2000/reset.c jz_wdt_restart), bit 2 P0R (power-on). Telling a
+ * watchdog fire from a software restart is left to the boot script, which
+ * uses nebulaos_reset_cppsr: the scratch word jz_wdt_restart sets to
+ * REBOOT_SIGNATURE (0x3535) before every software or panic restart and a
+ * watchdog fire never writes; read, then cleared here. Read-only. */
+static unsigned int nebulaos_reset_rsr;
+module_param(nebulaos_reset_rsr, uint, 0444);
+MODULE_PARM_DESC(nebulaos_reset_rsr, "CPM reset status at boot (read-only)");
+static unsigned int nebulaos_reset_cppsr;
+module_param(nebulaos_reset_cppsr, uint, 0444);
+MODULE_PARM_DESC(nebulaos_reset_cppsr, "CPM CPPSR scratch word at boot (read-only)");
+
+static unsigned int heartbeat = DEFAULT_HEARTBEAT;
+module_param(heartbeat, uint, 0);
+MODULE_PARM_DESC(heartbeat,
+                 "Watchdog heartbeat period in seconds from 1 to "
+                 __MODULE_STRING(MAX_HEARTBEAT) ", default "
+                 __MODULE_STRING(DEFAULT_HEARTBEAT));
+
+#if 0
+static int ingenic_restart_handler(struct notifier_block *this, unsigned long mode,
+                                   void *cmd)
+{
+	struct ingenic_wdt_drvdata *drvdata = container_of(this, struct ingenic_wdt_drvdata, restart_handler);
+	writew(INGENIC_WDT_CLOCK_RTC | INGENIC_WDT_CLOCK_CLRZ, drvdata->base + INGENIC_REG_WDT_TIMER_CONTROL);
+	wdt_set_half_and_full(drvdata, 0xa0, 'F');
+	writeb(0x1, drvdata->base + INGENIC_REG_WDT_COUNTER_ENABLE);
+
+	return NOTIFY_DONE;
+}
+#endif
+
+#ifdef WDT_DEBUG
+static void ingenic_wdt_pr_debug(struct ingenic_wdt_drvdata *drvdata)
+{
+	printk("\n*********************************************\n");
+	printk("half-full addr %08x value is %08x\n", (unsigned int)(drvdata->base + INGENIC_REG_WDT_TIMER_DATA),
+	       readl(drvdata->base + INGENIC_REG_WDT_TIMER_DATA));
+	printk("enable    addr %x value is %08x\n", (unsigned int)(drvdata->base + INGENIC_REG_WDT_COUNTER_ENABLE),
+	       readl(drvdata->base + INGENIC_REG_WDT_COUNTER_ENABLE));
+	printk("counter   addr %x value is %08x\n", (unsigned int)(drvdata->base + INGENIC_REG_WDT_TIMER_COUNTER),
+	       readl(drvdata->base + INGENIC_REG_WDT_TIMER_COUNTER));
+	printk("control   addr %x value is %08x\n", (unsigned int)(drvdata->base + INGENIC_REG_WDT_TIMER_CONTROL),
+	       readl(drvdata->base + INGENIC_REG_WDT_TIMER_CONTROL));
+	printk("flag      addr %x value is %08x\n", (unsigned int)(drvdata->base + INGENIC_REG_WDT_TIMER_FLAG_RD),
+	       readl(drvdata->base + INGENIC_REG_WDT_TIMER_FLAG_RD));
+	printk("mask      addr %x value is %08x\n", (unsigned int)(drvdata->base + INGENIC_REG_WDT_TIMER_MASK_RD),
+	       readl(drvdata->base + INGENIC_REG_WDT_TIMER_MASK_RD));
+	printk("stop      addr %x value is %08x\n", (unsigned int)(drvdata->base + INGENIC_REG_WDT_TIMER_STOP_RD),
+	       readl(drvdata->base + INGENIC_REG_WDT_TIMER_STOP_RD));
+	printk("\n*********************************************\n");
+}
+#endif
+
+#if IRQ_SWITCH
+static irqreturn_t ingenic_wdt_interrupt(int irq, void *dev_id)
+{
+
+	struct ingenic_wdt_drvdata *drvdata = (struct ingenic_wdt_drvdata *)(dev_id);
+#if 1
+	if (readl(drvdata->base + INGENIC_REG_WDT_TIMER_FLAG_RD) & INGENIC_WDT_TIMER_FLAG) {
+		writel(INGENIC_WDT_TIMER_FLAG, drvdata->base + INGENIC_REG_WDT_TIMER_FLAG_CLR);
+		writel(readl(drvdata->base + INGENIC_REG_WDT_TIMER_CONTROL) | INGENIC_WDT_CLOCK_CLRZ, drvdata->base + INGENIC_REG_WDT_TIMER_CONTROL);
+	}
+#else
+	printk("%s:%d ---------------enter interrupt ok ---------------\n", __func__, __LINE__);
+#endif
+	return IRQ_HANDLED;
+}
+#endif
+
+/* NebulaOS freeze diagnosis (2026-11-08). The 'H' compare (2/3 of the
+ * timeout: 40 s of the 60 s the feeder arms) is reached only when the
+ * userspace feeder has not fed for 40 s - the printer is frozen or nearly
+ * so. Until now that left no trace: the kernel's own detectors run from
+ * timers and printed nothing in the real mid-print freeze of 2026-11-08.
+ * This is a device interrupt (the TCU line, RTC-clocked), so it still
+ * arrives when every kernel timer is dead, as long as the CPU it is routed
+ * to takes interrupts. It masks itself (one shot, no storm), restarts the
+ * hardware count so the dump has a full timeout to finish, prints the
+ * clockevent state, the blocked tasks and every CPU's backtrace, then
+ * panics: the panic writes the whole kernel log into pstore (the record
+ * zone), past a console lock a frozen CPU might hold. If this never fires
+ * before a watchdog reset, the CPU that owns the line had interrupts off
+ * the whole time - also an answer. */
+extern void nebulaos_core_ost_dump(void);
+
+static irqreturn_t nebulaos_wdt_pretimeout(int irq, void *dev_id)
+{
+	struct ingenic_wdt_drvdata *drvdata = dev_id;
+
+	if (!(readl(drvdata->base + INGENIC_REG_WDT_TIMER_FLAG_RD) & INGENIC_WDT_TIMER_FLAG))
+		return IRQ_NONE;	/* shared TCU line: not ours */
+	writel(INGENIC_WDT_TIMER_MASK, drvdata->base + INGENIC_REG_WDT_TIMER_MASK_SET);
+	writel(INGENIC_WDT_TIMER_FLAG, drvdata->base + INGENIC_REG_WDT_TIMER_FLAG_CLR);
+	/* A software restart (soc-x2000/reset.c jz_wdt_restart) rewrites the
+	 * whole data register with a 4 ms count, which leaves the 'H' compare
+	 * at 0: the flag rises at once. That is a reboot, not a freeze. */
+	if (system_state != SYSTEM_RUNNING)
+		return IRQ_HANDLED;
+	writel(readl(drvdata->base + INGENIC_REG_WDT_TIMER_CONTROL) | INGENIC_WDT_CLOCK_CLRZ,
+	       drvdata->base + INGENIC_REG_WDT_TIMER_CONTROL);
+
+	pr_emerg("nebulaos-freeze: watchdog not fed for %u s (cpu%d, jiffies %lu) - dumping state\n",
+		 drvdata->timeout * 2 / 3, smp_processor_id(), jiffies);
+	nebulaos_core_ost_dump();
+	show_state_filter(TASK_UNINTERRUPTIBLE);
+	trigger_all_cpu_backtrace();
+	panic("nebulaos-freeze: watchdog pre-timeout");
+	return IRQ_HANDLED;
+}
+
+static int ingenic_wdt_ping(struct watchdog_device *wdt_dev)
+{
+	struct ingenic_wdt_drvdata *drvdata = watchdog_get_drvdata(wdt_dev);
+	writel(readl(drvdata->base + INGENIC_REG_WDT_TIMER_CONTROL) | INGENIC_WDT_CLOCK_CLRZ, drvdata->base + INGENIC_REG_WDT_TIMER_CONTROL);
+	return 0;
+}
+
+static  void wdt_set_half_and_full(struct ingenic_wdt_drvdata *drvdata, unsigned int value, char ch)
+{
+	int tmp ;
+	if (value > INGENIC_WDT_FULL_MAX) {
+		value = INGENIC_WDT_FULL_MAX;
+	}
+	tmp = readl(drvdata->base + INGENIC_REG_WDT_TIMER_DATA);
+	if ('H' == ch) {
+		tmp &= ~(INGENIC_WDT_FULL_MAX << INGENIC_WDT_OFFSET_16);
+		tmp |= value << INGENIC_WDT_OFFSET_16;
+	}
+	if ('F' == ch) {
+		tmp &= ~(INGENIC_WDT_FULL_MAX);
+		tmp |= value;
+	}
+	writel(tmp, drvdata->base + INGENIC_REG_WDT_TIMER_DATA);
+}
+
+/* NebulaOS G117(b) (Run 21): arm with a known timeout. The vendor start()
+ * only set the enable bit, so opening /dev/watchdog armed whatever TDR value
+ * the last reboot left (the platform reboot is itself a WDT reset with a
+ * ~4 ms TDR, soc-x2000/reset.c jz_wdt_restart) before WDIOC_SETTIMEOUT came
+ * - an instant reset at every boot. Now start() and a set_timeout on a
+ * running watchdog both stop the counter, program the full/half values and
+ * the prescaler, clear the counter (CLRZ) and only then enable it. The
+ * vendor set_timeout also compared drvdata->timeout with wdt_dev->timeout
+ * (equal after the first call) instead of the new value, so a second,
+ * different timeout was silently ignored. */
+static void ingenic_wdt_program(struct ingenic_wdt_drvdata *drvdata, unsigned int timeout)
+{
+	unsigned long timeout_value;
+
+	writeb(0x0, drvdata->base + INGENIC_REG_WDT_COUNTER_ENABLE);
+
+	/* prescaler 1024; the full value caps the timeout (FULL_MAX * 1024 / rate) */
+	timeout_value = clk_get_rate(drvdata->wdt_clk) * timeout / 1024;
+	if (timeout_value > INGENIC_WDT_FULL_MAX) {
+		timeout_value = INGENIC_WDT_FULL_MAX;
+	}
+
+	writel(INGENIC_WDT_TIMER_FLAG, drvdata->base + INGENIC_REG_WDT_TIMER_FLAG_CLR);
+	writel(INGENIC_WDT_TIMER_STOP, drvdata->base + INGENIC_REG_WDT_TIMER_STOP_CLR);
+
+	/*Reach this value set to reboot*/
+	wdt_set_half_and_full(drvdata, timeout_value, 'F');
+
+	/*When the set value is reached, the flag bit will be set to 1 and an interrupt will be triggered.*/
+	wdt_set_half_and_full(drvdata, timeout_value * 2 / 3, 'H');
+
+	/*set prescal clzr rtc_en*/
+	writew(INGENIC_WDT_CLOCK_DIV_1024 | INGENIC_WDT_CLOCK_RTC | INGENIC_WDT_CLOCK_CLRZ, drvdata->base + INGENIC_REG_WDT_TIMER_CONTROL);
+	writeb(0x1, drvdata->base + INGENIC_REG_WDT_COUNTER_ENABLE);
+
+	drvdata->timeout = timeout;
+}
+
+static int ingenic_wdt_set_timeout(struct watchdog_device *wdt_dev,
+                                   unsigned int new_timeout)
+{
+	struct ingenic_wdt_drvdata *drvdata = watchdog_get_drvdata(wdt_dev);
+
+	wdt_dev->timeout = new_timeout;
+	if (watchdog_active(wdt_dev)) {
+		ingenic_wdt_program(drvdata, new_timeout);
+	}
+	return 0;
+}
+
+static int ingenic_wdt_start(struct watchdog_device *wdt_dev)
+{
+	struct ingenic_wdt_drvdata *drvdata = watchdog_get_drvdata(wdt_dev);
+	ingenic_wdt_program(drvdata, wdt_dev->timeout);
+	return 0;
+}
+
+static int ingenic_wdt_stop(struct watchdog_device *wdt_dev)
+{
+	struct ingenic_wdt_drvdata *drvdata = watchdog_get_drvdata(wdt_dev);
+	writeb(0x0, drvdata->base + INGENIC_REG_WDT_COUNTER_ENABLE);
+	return 0;
+}
+
+static const struct watchdog_info ingenic_wdt_info = {
+	.options = WDIOF_SETTIMEOUT | WDIOF_KEEPALIVEPING | WDIOF_MAGICCLOSE,
+	.identity = "ingenic Watchdog",
+};
+
+static const struct watchdog_ops ingenic_wdt_ops = {
+	.owner = THIS_MODULE,
+	.start = ingenic_wdt_start,
+	.stop = ingenic_wdt_stop,
+	.ping = ingenic_wdt_ping,
+	.set_timeout = ingenic_wdt_set_timeout,
+};
+
+static const struct of_device_id ingenic_wdt_of_matches[] = {
+	{ .compatible = "ingenic,watchdog", .data = NULL },
+	{},
+};
+MODULE_DEVICE_TABLE(of, ingenic_wdt_of_matches)
+
+#ifdef CONFIG_PM_SLEEP
+static int ingenic_wdt_suspend(struct device *dev)
+{
+	struct ingenic_wdt_drvdata *drvdata = dev_get_drvdata(dev);
+	writeb(0x0, drvdata->base + INGENIC_REG_WDT_COUNTER_ENABLE);
+	return 0;
+}
+
+static int ingenic_wdt_resume(struct device *dev)
+{
+	struct ingenic_wdt_drvdata *drvdata = dev_get_drvdata(dev);
+	if (drvdata->timeout) {
+		writel(INGENIC_WDT_TIMER_FLAG, drvdata->base + INGENIC_REG_WDT_TIMER_FLAG_CLR);
+		writeb(0x1, drvdata->base + INGENIC_REG_WDT_COUNTER_ENABLE);
+		//ping
+		writel(readl(drvdata->base + INGENIC_REG_WDT_TIMER_CONTROL) | INGENIC_WDT_CLOCK_CLRZ, drvdata->base + INGENIC_REG_WDT_TIMER_CONTROL);
+	}
+	return 0;
+}
+
+static SIMPLE_DEV_PM_OPS(ingenic_wdt_pm_ops, ingenic_wdt_suspend, ingenic_wdt_resume);
+#endif  // CONFIG_PM_SLEEP
+static int ingenic_wdt_probe(struct platform_device *pdev)
+{
+	struct ingenic_wdt_drvdata *drvdata;
+	struct watchdog_device *ingenic_wdt;
+	struct resource *res;
+	int ret;
+
+	drvdata = devm_kzalloc(&pdev->dev, sizeof(struct ingenic_wdt_drvdata),
+	                       GFP_KERNEL);
+	if (!drvdata) {
+		dev_err(&pdev->dev, "Unable to alloacate watchdog device\n");
+		return -ENOMEM;
+	}
+
+	drvdata->irq = platform_get_irq(pdev, 0);
+	if (drvdata->irq < 0) {
+		dev_err(&pdev->dev, "no irq for watchdog tick\n");
+		ret = drvdata->irq;
+		goto err_nosrc;
+	}
+
+	if (heartbeat < 1 || heartbeat > MAX_HEARTBEAT) {
+		heartbeat = DEFAULT_HEARTBEAT;
+	}
+
+	ingenic_wdt = &drvdata->wdt;
+	ingenic_wdt->info = &ingenic_wdt_info;
+	ingenic_wdt->ops = &ingenic_wdt_ops;
+	ingenic_wdt->timeout = heartbeat;
+	ingenic_wdt->min_timeout = 1;
+	ingenic_wdt->max_timeout = MAX_HEARTBEAT;
+	watchdog_set_nowayout(ingenic_wdt, nowayout);
+	watchdog_set_drvdata(ingenic_wdt, drvdata);
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+
+	drvdata->base = devm_ioremap_resource(&pdev->dev, res);
+	if (IS_ERR(drvdata->base)) {
+		ret = PTR_ERR(drvdata->base);
+		goto err_out;
+	}
+
+	drvdata->wdt_clk = devm_clk_get(&pdev->dev, "mux_wdt");
+
+	if (IS_ERR(drvdata->wdt_clk)) {
+		dev_err(&pdev->dev, "cannot find WDT clock\n");
+		ret = PTR_ERR(drvdata->wdt_clk);
+		goto err_out;
+	}
+
+#if ((defined CONFIG_SOC_X2600) || (defined CONFIG_SOC_AD100))
+	drvdata->tcu_clk = devm_clk_get(&pdev->dev, "gate_tcu0");
+#else
+	drvdata->tcu_clk = devm_clk_get(&pdev->dev, "gate_tcu");
+#endif
+	if (IS_ERR(drvdata->tcu_clk)) {
+		dev_err(&pdev->dev, "cannot find TCU clock\n");
+		ret = PTR_ERR(drvdata->tcu_clk);
+		goto err_out;
+	}
+
+	clk_prepare_enable(drvdata->wdt_clk);
+	clk_prepare_enable(drvdata->tcu_clk);
+
+	/* NebulaOS G117(b): the real maximum is FULL_MAX ticks at rate/1024
+	 * (~1431 s at 46875 Hz), not MAX_HEARTBEAT */
+	if (clk_get_rate(drvdata->wdt_clk) > 0) {
+		unsigned int hw_max = INGENIC_WDT_FULL_MAX * 1024UL / clk_get_rate(drvdata->wdt_clk);
+		if (hw_max >= 1 && hw_max < ingenic_wdt->max_timeout)
+			ingenic_wdt->max_timeout = hw_max;
+		if (ingenic_wdt->timeout > ingenic_wdt->max_timeout)
+			ingenic_wdt->timeout = ingenic_wdt->max_timeout;
+	}
+
+	ret = watchdog_register_device(&drvdata->wdt);
+	if (ret < 0) {
+		goto err_disable_clk;
+	}
+#if 0
+	drvdata->timeout = 0;
+	drvdata->restart_handler.notifier_call = ingenic_restart_handler;
+	drvdata->restart_handler.priority = 128;
+	ret = register_restart_handler(&drvdata->restart_handler);
+	if (ret) {
+		dev_err(&pdev->dev, "cannot register restart handler\n");
+	}
+#endif
+
+	/* OpenKE (2026-07-21, FIRMWARE.md sec 32/33): explicitly stop the counter at probe time,
+	 * unconditionally. This driver never did this before - it only registers the /dev/watchdog
+	 * device, it never touches the actual hardware enable bit unless userspace opens the
+	 * device (which nothing on our build does) or .start()/.stop() get called. If U-Boot/SPL
+	 * ever left this counter running from an earlier stage, nothing in this kernel would ever
+	 * stop it - it would just keep ticking down toward whatever expiry SPL set, independent of
+	 * whether this driver "successfully probed" or not. Real, empirical motivation: a boot
+	 * attempt reached "Run /linuxrc as init process" then reset with zero panic message and
+	 * zero delay, despite CONFIG_PANIC_TIMEOUT=10 - a real software panic() always prints
+	 * something and waits; this didn't, meaning it was very likely a hardware-level reset, not
+	 * a software crash. This write is a defensive, always-safe no-op if the counter was never
+	 * running in the first place.
+	 */
+	writeb(0x0, drvdata->base + INGENIC_REG_WDT_COUNTER_ENABLE);
+
+#if IRQ_SWITCH
+	writel(INGENIC_WDT_TIMER_MASK, drvdata->base + INGENIC_REG_WDT_TIMER_MASK_CLR);
+#else
+	/* NebulaOS black box (Run 24, 2026-11-06): with no handler (IRQ_SWITCH
+	 * 0) the WDT interrupt must stay MASKED. The vendor code unmasked it
+	 * here (MASK_CLR), so 40 s after the last feed (the 'H' compare at
+	 * 2/3 of the timeout) its flag held the shared TCU line asserted and
+	 * irq/35-ingenic-tcu-interrupt ran at 100% for the last ~20 s before
+	 * every watchdog reset - seen on ke-dev in the heartbeat of a
+	 * watchdog-fire test. Never reached while the feeder runs. The reset
+	 * itself does not depend on this interrupt. */
+	writel(INGENIC_WDT_TIMER_MASK, drvdata->base + INGENIC_REG_WDT_TIMER_MASK_SET);
+#endif
+	writel(INGENIC_WDT_TIMER_FLAG, drvdata->base + INGENIC_REG_WDT_TIMER_FLAG_CLR);
+#if !IRQ_SWITCH
+	/* The pre-timeout dump (nebulaos_wdt_pretimeout): it clears and masks
+	 * the flag itself, so unmasking is safe now that a handler exists. */
+	ret = request_irq(drvdata->irq, nebulaos_wdt_pretimeout,
+	                  IRQF_SHARED | IRQF_TRIGGER_LOW, "watchdog-pretimeout", drvdata);
+	if (ret)
+		dev_err(&pdev->dev, "pre-timeout irq %d: %d (no freeze dump)\n", drvdata->irq, ret);
+	else
+		writel(INGENIC_WDT_TIMER_MASK, drvdata->base + INGENIC_REG_WDT_TIMER_MASK_CLR);
+#endif
+#if IRQ_SWITCH
+	ret = request_irq(drvdata->irq, ingenic_wdt_interrupt,
+	                  IRQF_SHARED | IRQF_TRIGGER_LOW, "watchdog-int", drvdata);
+	if (ret) {
+		pr_debug("IRQ %d already in use.\n", drvdata->irq);
+		dev_err(&pdev->dev, "--request_irq error------irq = %d\n", drvdata->irq);
+		goto err_free_irq;
+	}
+#endif
+	platform_set_drvdata(pdev, drvdata);
+
+	nebulaos_reset_rsr = cpm_inl(CPM_RSR);
+	nebulaos_reset_cppsr = cpm_inl(CPM_CPPSR);
+	cpm_outl(0, CPM_RSR);
+	/* Clear the reboot signature too (same unlock as jz_wdt_restart), so
+	 * the next boot sees 0x3535 only if THIS boot ended in a software or
+	 * panic restart - a watchdog fire after a freeze never writes it. */
+	cpm_outl(0x5a5a, CPM_CPSPPR);
+	cpm_outl(0, CPM_CPPSR);
+	cpm_outl(0x0, CPM_CPSPPR);
+	pr_info("ingenic_wdt: reset status RSR=0x%08x%s%s%s CPPSR=0x%08x\n",
+		nebulaos_reset_rsr,
+		/* soc-x2000 cpm.h: RSR_PR BIT0 (power-on; 0x1 after switching
+		 * on, proven on ke-dev), RSR_WR BIT1, RSR_P0R BIT2. Every
+		 * software or panic restart also goes through the watchdog
+		 * (jz_wdt_restart) and leaves REBOOT_SIGNATURE 0x3535 in CPPSR;
+		 * only WR without it is a watchdog fire. */
+		(nebulaos_reset_rsr & (1 << 0)) ? " power-on" : "",
+		!(nebulaos_reset_rsr & (1 << 1)) ? "" :
+			nebulaos_reset_cppsr == 0x3535 ? " restart" : " watchdog",
+		(nebulaos_reset_rsr & (1 << 2)) ? " p0-reset" : "",
+		nebulaos_reset_cppsr);
+
+	pr_info("ingenic watchdog probe success\n");
+	return 0;
+#if IRQ_SWITCH
+err_free_irq:
+	free_irq(drvdata->irq, drvdata);
+#endif
+err_nosrc:
+	kfree(drvdata);
+err_disable_clk:
+	clk_put(drvdata->wdt_clk);
+	clk_put(drvdata->tcu_clk);
+err_out:
+	return ret;
+}
+
+static int ingenic_wdt_remove(struct platform_device *pdev)
+{
+	struct ingenic_wdt_drvdata *drvdata = platform_get_drvdata(pdev);
+
+	ingenic_wdt_stop(&drvdata->wdt);
+	unregister_restart_handler(&drvdata->restart_handler);
+#if IRQ_SWITCH
+	free_irq(drvdata->irq, drvdata);
+#endif
+	watchdog_unregister_device(&drvdata->wdt);
+	clk_put(drvdata->wdt_clk);
+	clk_put(drvdata->tcu_clk);
+
+	return 0;
+}
+
+static struct platform_driver ingenic_wdt_driver = {
+	.probe = ingenic_wdt_probe,
+	.remove = ingenic_wdt_remove,
+	.driver = {
+		.name = "ingenic-watchdog",
+		.of_match_table = of_match_ptr(ingenic_wdt_of_matches),
+#ifdef CONFIG_PM_SLEEP
+		.pm = &ingenic_wdt_pm_ops,
+#endif
+	},
+};
+
+module_platform_driver(ingenic_wdt_driver);
+
+MODULE_AUTHOR("bo liu <bo.liu@ingenic.com>");
+MODULE_DESCRIPTION("ingenic xburst2 Watchdog Driver");
+MODULE_LICENSE("GPL");
+MODULE_ALIAS_MISCDEV(WATCHDOG_MINOR);
+MODULE_ALIAS("platform:ingenic-wdt");
