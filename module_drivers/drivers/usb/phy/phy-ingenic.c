@@ -29,15 +29,7 @@
 	(IRQF_SHARED | IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING)
 
 static const struct of_device_id of_matchs[] = {
-	{ .compatible = "ingenic,usbphy-x1000", .data = (void *) &usb_phy_x1000_priv},
-	{ .compatible = "ingenic,usbphy-x1600", .data = (void *) &usb_phy_x1600_priv},
 	{ .compatible = "ingenic,usbphy-x2000", .data = (void *) &usb_phy_x2000_priv},
-	{ .compatible = "ingenic,usbphy-m300", .data = (void *) &usb_phy_x2000_priv},
-	{ .compatible = "ingenic,usbphy-x2500", .data = (void *) &usb_phy_x2500_priv},
-	{ .compatible = "ingenic,usbphy0-x2600", .data = (void *) &usb0_phy_x2600_priv},
-	{ .compatible = "ingenic,usbphy1-x2600", .data = (void *) &usb1_phy_x2600_priv},
-	{ .compatible = "ingenic,usbphy0-ad100", .data = (void *) &usb0_phy_ad100_priv},
-	{ .compatible = "ingenic,usbphy1-ad100", .data = (void *) &usb1_phy_ad100_priv}, // sample
 	{ },
 };
 
@@ -84,7 +76,7 @@ static int common_phy_set_suspend(struct usb_phy *phy, int suspend)
 	return ret;
 }
 
-static int common_phy_set_wakeup(struct usb_phy *phy, int enabled)
+static int common_phy_set_wakeup(struct usb_phy *phy, bool enabled)
 {
 	struct usb_phy_data *usb_phy = container_of(phy, struct usb_phy_data, phy);
 
@@ -124,37 +116,6 @@ static int common_phy_set_wakeup(struct usb_phy *phy, int enabled)
 	}
 
 	return 0;
-}
-
-static int common_phy_get_wakeup(struct usb_phy *phy)
-{
-	struct usb_phy_data *usb_phy = container_of(phy, struct usb_phy_data, phy);
-	int ret = 0;
-
-	if (usb_phy->phy_priv->phy_get_wakeup) {
-		ret = usb_phy->phy_priv->phy_get_wakeup(usb_phy);
-	}
-
-#ifdef TEST_USB_WAKEUP_FLAG
-	if (usb_phy->wakeup_flag) {
-		usb_phy->wakeup_flag = 0;
-		ret = 1;
-	}
-#endif
-
-	return ret;
-}
-
-static enum usb_device_power common_phy_get_power(struct usb_phy *phy)
-{
-	struct usb_phy_data *usb_phy = container_of(phy, struct usb_phy_data, phy);
-	int ret = USB_POWER_UNKNOWN;
-
-	if (usb_phy->phy_priv->phy_get_power) {
-		ret = usb_phy->phy_priv->phy_get_power(usb_phy);
-	}
-
-	return ret;
 }
 
 static irqreturn_t usb_wakeup_irq_handler(int irq, void *data)
@@ -476,11 +437,6 @@ static int ingenic_usb_phy_probe(struct platform_device *pdev)
 	usb_phy->phy.shutdown = common_phy_shutdown;
 	usb_phy->phy.set_suspend = common_phy_set_suspend;
 	usb_phy->phy.set_wakeup = common_phy_set_wakeup;
-	usb_phy->phy.get_wakeup = common_phy_get_wakeup;
-
-	if (usb_phy->phy_priv->phy_get_power) {
-		usb_phy->phy.get_power = common_phy_get_power;
-	}
 
 	usb_phy->phy.otg->state = OTG_STATE_UNDEFINED;
 	usb_phy->phy.otg->usb_phy = &usb_phy->phy;
@@ -611,6 +567,12 @@ static int ingenic_usb_phy_probe(struct platform_device *pdev)
 		return err;
 	}
 
+	/*
+	 * The SDK's dwc2 asks for its transceiver by a phandle of its own
+	 * ("ingenic,usbphy"), upstream's by type.
+	 */
+	usb_phy->phy.type = USB_PHY_TYPE_USB2;
+
 	/* only active when a gadget is registered */
 	err = usb_add_phy_dev(&usb_phy->phy);
 	if (err) {
@@ -625,7 +587,7 @@ static int ingenic_usb_phy_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int ingenic_usb_phy_remove(struct platform_device *pdev)
+static void ingenic_usb_phy_remove(struct platform_device *pdev)
 {
 	struct usb_phy_data *usb_phy = platform_get_drvdata(pdev);
 
@@ -646,8 +608,6 @@ static int ingenic_usb_phy_remove(struct platform_device *pdev)
 	if (!usb_phy->disable_sw_switch_id) {
 		device_remove_node(usb_phy->dev, usb_phy_attributes);
 	}
-
-	return 0;
 }
 
 #ifdef CONFIG_PM

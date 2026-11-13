@@ -61,9 +61,6 @@ struct usb_phy_priv {
 	int (*phy_set_suspend)(struct usb_phy_data *usb_phy, int suspend);
 
 	int (*phy_set_wakeup)(struct usb_phy_data *usb_phy, int enabled);
-	int (*phy_get_wakeup)(struct usb_phy_data *usb_phy);
-
-	enum usb_device_power(*phy_get_power)(struct usb_phy_data *usb_phy);
 };
 
 static inline unsigned int usb_cpm_readl(struct usb_phy_data *usb_phy, unsigned int reg_offset)
@@ -134,12 +131,5 @@ static inline void usb_controller_writel(struct usb_phy_data *usb, unsigned int 
 #define usb_controller_test_bit(_data,_val,_off) \
 	(usb_controller_readl(_data, _off) & (0x1 << (_val)))
 
-extern struct usb_phy_priv usb_phy_x1000_priv;
-extern struct usb_phy_priv usb_phy_x1600_priv;
 extern struct usb_phy_priv usb_phy_x2000_priv;
-extern struct usb_phy_priv usb_phy_x2500_priv;
-extern struct usb_phy_priv usb0_phy_x2600_priv;
-extern struct usb_phy_priv usb1_phy_x2600_priv;
-extern struct usb_phy_priv usb0_phy_ad100_priv;
-extern struct usb_phy_priv usb1_phy_ad100_priv; //sample
 #endif /* _PHY_INGENIC_H_ */
