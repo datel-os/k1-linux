@@ -557,14 +557,14 @@ static int __init ingenic_ost_init(struct device_node *np)
 	int index = 0;
 
 	g_iobase = of_io_request_and_map(np, 0, "ost");
-	if (g_iobase == NULL) {
+	if (IS_ERR(g_iobase)) {
 		pr_err("Failed to map global clocksource iobase!\n");
-		return -EINVAL;
+		return PTR_ERR(g_iobase);
 	}
 	core_iobase = of_io_request_and_map(np, 1, "core-ost");
-	if (core_iobase == NULL) {
+	if (IS_ERR(core_iobase)) {
 		pr_err("Failed to map core clockevent iobase!\n");
-		return -EINVAL;
+		return PTR_ERR(core_iobase);
 	}
 
 	irq = of_irq_get_byname(np, "sys_ost");
