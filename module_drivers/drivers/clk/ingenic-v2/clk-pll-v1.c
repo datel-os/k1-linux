@@ -83,7 +83,7 @@ Note: the PLL filter is FIN/ (PLLRD+1)
 
 FIN is fixed to 24M.
 */
-const static char pll_rd_vs_rg_table[8] = {3, 2, 1, 0, 0, 0, 0, 0};
+static const char pll_rd_vs_rg_table[8] = {3, 2, 1, 0, 0, 0, 0, 0};
 
 static int ingenic_v1_pll_set_rate(struct clk_hw *hw, unsigned long drate, unsigned long prate)
 {

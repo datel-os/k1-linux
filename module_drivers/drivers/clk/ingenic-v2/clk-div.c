@@ -161,7 +161,7 @@ static struct clk_ops clk_cgu_divider_ops = {
 	.disable = clk_cgu_divider_disable,
 };
 
-struct clk *_register_cgu_divider(struct device *dev, const char *name,
+static struct clk *_register_cgu_divider(struct device *dev, const char *name,
                                   const char *parent_name, unsigned long flags,
                                   void __iomem *reg, u8 shift, u8 width, u8 busy_shift,
                                   int en_shift, u8 stop_shift, u8 clk_divider_flags,

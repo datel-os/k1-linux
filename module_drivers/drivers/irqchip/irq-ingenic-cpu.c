@@ -107,19 +107,15 @@ static void __init __ingenic_cpu_irq_init(struct device_node *of_node)
 	clear_c0_status(ST0_IM);
 	clear_c0_cause(CAUSEF_IP);
 
-	domain = irq_domain_add_legacy(of_node, 8, MIPS_CPU_IRQ_BASE, 0,
-	                               &ingenic_cpu_intc_irq_domain_ops, NULL);
+	domain = irq_domain_create_legacy(of_fwnode_handle(of_node), 8,
+					  MIPS_CPU_IRQ_BASE, 0,
+					  &ingenic_cpu_intc_irq_domain_ops, NULL);
 	if (!domain) {
 		panic("Failed to add irqdomain for MIPS CPU");
 	}
 }
 
-void __init ingenic_cpu_irq_init(void)
-{
-	__ingenic_cpu_irq_init(NULL);
-}
-
-int __init ingenic_cpu_irq_of_init(struct device_node *of_node,
+static int __init ingenic_cpu_irq_of_init(struct device_node *of_node,
                                    struct device_node *parent)
 {
 	__ingenic_cpu_irq_init(of_node);

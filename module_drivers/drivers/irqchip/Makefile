@@ -1,3 +1,3 @@
-obj-$(CONFIG_INGENIC_INTC)              += irq-ingenic.o
+# SPDX-License-Identifier: GPL-2.0
 obj-$(CONFIG_IRQ_INGENIC_CPU)           += irq-ingenic-cpu.o
 obj-$(CONFIG_INGENIC_INTC_CHIP)         += irq-ingenic-chip.o

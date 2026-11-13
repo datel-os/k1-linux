@@ -387,7 +387,8 @@ static int __init ingenic_intc_of_init(struct device_node *node)
 
 	irq_chips->intc_clk  = clk_get(NULL, "gate_intc");
 
-	domain = irq_domain_add_legacy(node, INTC_NR_IRQS, 8, 0, &ingenic_irq_domain_ops, chip);
+	domain = irq_domain_create_legacy(of_fwnode_handle(node), INTC_NR_IRQS, 8, 0,
+					  &ingenic_irq_domain_ops, chip);
 	WARN(!iobase, "Unable to register IRQ domain!\n");
 
 	percpu_irq_init(irq_chips, 0);
@@ -494,57 +495,3 @@ void ingenic_irq_cpumask_idle(int idle)
 	irq_unlock(chip);
 }
 EXPORT_SYMBOL_GPL(ingenic_irq_cpumask_idle);
-
-static unsigned long intc_saved[4];
-extern void __enable_irq(struct irq_desc *desc, unsigned int irq, bool resume);
-
-void arch_suspend_disable_irqs(void)
-{
-	struct irq_chip_data *chip_data = &g_irq_chips.chip_data;
-	struct core_irq_chip *irq_chip = *this_cpu_ptr(g_irq_chips.percpu_irq_chip);
-	struct core_irq_chips *irq_chips = &g_irq_chips;
-
-	unsigned int *intc_wakeup = chip_data->wake_up_flag;
-	void __iomem *intc_base = irq_chip->iobase;
-
-	local_irq_disable();
-
-	intc_saved[0] = readl(intc_base + IMR_OFF);
-	intc_saved[1] = readl(intc_base + PART_OFF + IMR_OFF);
-
-	/* Mask interrupts which are not wakeup src. */
-	writel(0xffffffff & ~intc_wakeup[0], intc_base + IMSR_OFF);
-	writel(0xffffffff & ~intc_wakeup[1], intc_base + PART_OFF + IMSR_OFF);
-	if (IS_ERR(irq_chips->intc_clk)) {
-		irq_chips->intc_clk  = clk_get(NULL, "gate_intc");
-	}
-	if (!IS_ERR(irq_chips->intc_clk)) {
-		clk_prepare_enable(irq_chips->intc_clk);
-	}
-
-	intc_saved[2] = readl(irq_chips->iobase + IMR_OFF);
-	intc_saved[3] = readl(irq_chips->iobase + PART_OFF + IMR_OFF);
-
-	writel(0xffffffff & ~intc_wakeup[0], irq_chips->iobase + IMR_OFF);
-	writel(0xffffffff & ~intc_wakeup[1], irq_chips->iobase + PART_OFF + IMR_OFF);
-
-}
-
-void arch_suspend_enable_irqs(void)
-{
-	struct core_irq_chip *irq_chip = *this_cpu_ptr(g_irq_chips.percpu_irq_chip);
-	void __iomem *intc_base = irq_chip->iobase;
-	struct core_irq_chips *irq_chips = &g_irq_chips;
-	struct clk *intc_clk = irq_chips->intc_clk;
-
-	writel(intc_saved[2], irq_chips->iobase + IMR_OFF);
-	writel(intc_saved[3], irq_chips->iobase + PART_OFF + IMR_OFF);
-	if (!IS_ERR(intc_clk)) {
-		clk_disable_unprepare(intc_clk);
-	}
-
-	writel(0xffffffff & ~intc_saved[0], intc_base + IMCR_OFF);
-	writel(0xffffffff & ~intc_saved[1], intc_base + PART_OFF + IMCR_OFF);
-
-	local_irq_enable();
-}

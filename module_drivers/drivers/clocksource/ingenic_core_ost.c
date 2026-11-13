@@ -242,7 +242,7 @@ static unsigned long long sched_clock(void)
 	return cycles;
 }
 
-void __init core_clocksource_init(struct core_ost_chip *core_ost, struct tmr_src *tmr)
+static void __init core_clocksource_init(struct core_ost_chip *core_ost, struct tmr_src *tmr)
 {
 	unsigned long hz;
 	void __iomem *iobase;
@@ -500,7 +500,11 @@ void nebulaos_core_ost_dump(void)
 		struct core_timerevent *t = &timerevent_buf[i];
 		void __iomem *b = t->iobase;
 		unsigned int hw = cpu_ost_map[i].cpu_num;
+#ifdef CONFIG_SMP
 		int cpu = cpu_number_map(hw);
+#else
+		int cpu = hw;
+#endif
 
 		if (!b)
 			continue;

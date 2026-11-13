@@ -130,7 +130,7 @@ static struct clk_ops clk_bus_divider_ops = {
 	.set_rate = clk_bus_divider_set_rate,
 };
 
-struct clk *_register_bus_divider(struct device *dev, const char *name,
+static struct clk *_register_bus_divider(struct device *dev, const char *name,
                                   const char *parent_name, unsigned long flags,
                                   void __iomem *reg, u8 shift1, u8 width1, u8 shift2, u8 width2,
                                   void __iomem *busy_reg, u8 busy_shift,
