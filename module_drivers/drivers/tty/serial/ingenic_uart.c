@@ -1603,8 +1603,8 @@ static int serial_ingenic_probe(struct platform_device *pdev)
 	up->port.flags = UPF_IOREMAP | UPF_BOOT_AUTOCONF;
 	up->port.uartclk = uartclk;
 	up->port.membase = devm_ioremap_resource(&pdev->dev, mmres);
-	if (!up->port.membase) {
-		return -ENOMEM;
+	if (IS_ERR(up->port.membase)) {
+		return PTR_ERR(up->port.membase);
 	}
 
 	if (up->use_dma) {
