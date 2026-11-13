@@ -2,7 +2,7 @@
 
 The kernel of [Datel OS](https://github.com/zales/datel-os) for the Creality K1 3D printer, whose mainboard carries an Ingenic X2000: two XBurst2 MIPS32 cores and 256 MB of RAM. It is kernel.org's stable Linux 6.18 plus the support the board needs, added through pull requests.
 
-**State:** phase A is under way. The tree builds a kernel for the K1 (`k1_defconfig`) that cannot run yet: the platform code is there, the drivers are not. Datel OS ships Ingenic's SDK kernel 6.6 until phase A below is complete.
+**State:** phase A is under way. The tree builds a kernel for the K1 (`k1_defconfig`) with the board's device tree built in; it has not run on a printer yet. Datel OS ships Ingenic's SDK kernel 6.6 until phase A below is complete.
 
 The kernel's own introduction is in [README](README).
 
@@ -22,9 +22,9 @@ Mainline has drivers for some of the X2000 (pin control, USB, SPI, Ethernet) but
 | MMC, DMA, I2C | carried over, not run yet | not yet |
 | USB | transceiver carried over, upstream's `dwc2`; not run yet | not yet |
 | TCU, watchdog, RTC, random number generator | carried over, not run yet | not yet |
-| The K1 board: device tree, `k1_defconfig`, Helix codec driver, pstore | not yet | not yet |
+| The K1 board: device tree, `k1_defconfig`, Helix codec driver, pstore | device tree cut down from the SDK's, board file written, Helix driver from Datel OS; not run yet | not yet |
 
-The carried code keeps the SDK's paths, so a file can be compared with its origin: the platform in `arch/mips/xburst2`, the drivers in `module_drivers/`. What the SDK changes in the kernel's own files is tied to `CONFIG_MACH_XBURST2`.
+The carried code keeps the SDK's paths, so a file can be compared with its origin: the platform in `arch/mips/xburst2`, the drivers in `module_drivers/`. What the SDK changes in the kernel's own files is tied to `CONFIG_MACH_XBURST2`. The device tree is where upstream keeps Ingenic's, `arch/mips/boot/dts/ingenic/`: `x2000.dtsi` and `x2000-pinctrl.dtsi` for the SoC, `creality-k1.dts` for the board.
 
 ## Branches
 
@@ -65,6 +65,12 @@ make ARCH=mips CROSS_COMPILE=mipsel-linux-gnu- O=build -j"$(nproc)"
 ```
 
 The image for the printer is `build/arch/mips/boot/uzImage.bin`: the self-extracting kernel in a U-Boot header, loaded at `0x80f00000`. The stock boot loader takes nothing else; it cannot unpack a kernel itself. `mkimage` comes from the package `u-boot-tools`.
+
+A kernel meant for a printer needs three things more:
+
+- `LOCALVERSION=` on both `make` lines. Built from a git checkout the release is otherwise `6.18.63+`, and the modules' directory has to carry the same name.
+- The modules, `make … INSTALL_MOD_PATH=<root> modules_install`. The Wi-Fi driver `brcmfmac` is one: it reads its firmware from the root file system, which a built-in driver would ask for before that is mounted.
+- The wireless regulatory database as built-in firmware, `CONFIG_EXTRA_FIRMWARE="regulatory.db regulatory.db.p7s"` with `CONFIG_EXTRA_FIRMWARE_DIR` set to where the files are. `cfg80211` is built in and loads it before the root file system is there. The files are not part of this tree, so `k1_defconfig` does not name them.
 
 [.github/workflows/build.yml](.github/workflows/build.yml) runs this build for every pull request and for every push to `main`. It checks that the tree compiles; it does not run the kernel. The repository is private and its Actions minutes are limited, so the workflow is one job with a compiler cache, and changes to documentation alone do not start it.
 
