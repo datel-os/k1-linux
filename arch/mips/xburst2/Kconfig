@@ -13,6 +13,7 @@ config SOC_X2000
 	select INGENIC_INTC_CHIP
 	select IRQ_INGENIC_CPU
 	select PINCTRL
+	select PINCTRL_INGENIC_V2
 	select TIMER_OF
 
 config EXTAL_CLOCK

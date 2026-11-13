@@ -1,4 +1,4 @@
-
+# SPDX-License-Identifier: GPL-2.0
 config PINCTRL_INGENIC_V2
 	bool "Pinctrl driver for the Ingenic X2000/X1600 SoCs"
 	default y
@@ -12,11 +12,7 @@ config PINCTRL_INGENIC_V2
 	select REGMAP_MMIO
 
 config PINCTRL_DUMP
-    bool "Enable Pinctrl dump feature"
-    default y
-    help
-        Enable this option to generate sysfs attributes for Pinctrl dump.
-
-config MULTI_VGPIO_INGENIC
-	   bool "multiple input lineout to signle output"
-
+	bool "Enable Pinctrl dump feature"
+	default y
+	help
+	  Enable this option to generate sysfs attributes for Pinctrl dump.

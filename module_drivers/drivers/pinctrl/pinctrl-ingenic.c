@@ -14,7 +14,6 @@
  */
 
 #include <linux/module.h>
-#include <linux/syscore_ops.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/gpio.h>
@@ -613,13 +612,14 @@ static void ingenic_gpio_pins_set(struct ingenic_gpio_chip *jzgc,
 	raw_spin_unlock_irqrestore(&pctl->shadow_lock, flags);
 }
 
-static void ingenic_gpio_set(struct gpio_chip *chip,
-                             unsigned pin, int value)
+static int ingenic_gpio_set(struct gpio_chip *chip,
+                            unsigned pin, int value)
 {
 	struct ingenic_gpio_chip *jzgc = gc_to_ingenic_gc(chip);
 
 	BUG_ON(pin > jzgc->gc.ngpio);
 	ingenic_gpio_pins_set(jzgc, BIT(pin), value);
+	return 0;
 }
 
 static int ingenic_gpio_get(struct gpio_chip *chip, unsigned pin)
@@ -665,7 +665,6 @@ static int ingenic_gpio_to_irq(struct gpio_chip *chip,
 static int ingenic_gpio_request(struct gpio_chip *chip, unsigned offset)
 {
 	struct ingenic_gpio_chip *jzgc = gc_to_ingenic_gc(chip);
-	unsigned gpio = chip->base + offset;
 
 	if (jzgc->used_pins_bitmap & (1 << offset)) {
 		printk("%s: GP:%s  used_pins_bitmap: 0X%08X\n", __func__, jzgc->name, jzgc->used_pins_bitmap);
@@ -685,13 +684,12 @@ static int ingenic_gpio_request(struct gpio_chip *chip, unsigned offset)
 	 * design. */
 	jzgc->pinmux_used_bitmap &= ~(1 << offset);
 
-	return pinctrl_gpio_request(gpio);
+	return pinctrl_gpio_request(chip, offset);
 }
 static void ingenic_gpio_free(struct gpio_chip *chip, unsigned offset)
 {
 	struct ingenic_gpio_chip *jzgc = gc_to_ingenic_gc(chip);
-	unsigned gpio = chip->base + offset;
-	pinctrl_gpio_free(gpio);
+	pinctrl_gpio_free(chip, offset);
 	jzgc->used_pins_bitmap &= ~(1 << offset);
 }
 
@@ -794,7 +792,7 @@ static int ingenic_gpio_chip_add(struct ingenic_pinctrl *pctl,
 	gc->parent = pctl->dev;
 	gc->label = jzgc->name;
 	gc->of_xlate = ingenic_of_gpio_xlate;
-	return gpiochip_add(gc);
+	return gpiochip_add_data(gc, NULL);
 }
 
 static void ingenic_gpio_sleep_init(struct device_node *np,
@@ -1028,9 +1026,20 @@ static int ingenic_get_group_pins(struct pinctrl_dev *pctldev,
 	return 0;
 }
 
-static int ingenic_gc_match(struct gpio_chip *chip, void *data)
+/*
+ * The GPIO chip of a device tree node. gpiochip_find() is gone; the chips of
+ * this driver are never removed, so the pointer outlives the reference.
+ */
+static struct gpio_chip *ingenic_gc_find(struct device_node *np)
 {
-	return chip->fwnode == data;
+	struct gpio_device *gdev = gpio_device_find_by_fwnode(of_fwnode_handle(np));
+	struct gpio_chip *gc;
+
+	if (!gdev)
+		return NULL;
+	gc = gpio_device_get_chip(gdev);
+	gpio_device_put(gdev);
+	return gc;
 }
 
 static int ingenic_packed_config(int cfgval, int *config)
@@ -1130,7 +1139,7 @@ static int of_prase_pincfg_to_map(struct device_node *np,
 	while (!of_parse_phandle_with_args(np, "ingenic,pincfg",
 	                                   "#ingenic,pincfg-cells", index++,
 	                                   &out_args)) {
-		gc = gpiochip_find(of_fwnode_handle(out_args.np), ingenic_gc_match);
+		gc = ingenic_gc_find(out_args.np);
 		if (!gc) {
 			return -EINVAL;
 		}
@@ -1206,7 +1215,7 @@ static int ingenic_dt_node_to_map(struct pinctrl_dev *pctldev,
 	}
 	while (!of_parse_phandle_with_args(np_config, "ingenic,pincfg",
 	                                   "#ingenic,pincfg-cells", index++, &out_args)) {
-		gc = gpiochip_find(of_fwnode_handle(out_args.np), ingenic_gc_match);
+		gc = ingenic_gc_find(out_args.np);
 		if (!gc) {
 			return -ENOMEM;
 		}
@@ -1596,7 +1605,7 @@ static int ingenic_init_group(struct device *dev, struct device_node *np,
 	if (!gpio_np) {
 		return 0;
 	}
-	grp->gc = gpiochip_find(of_fwnode_handle(gpio_np), ingenic_gc_match);
+	grp->gc = ingenic_gc_find(gpio_np);
 	if (!grp->gc) {
 		return -EINVAL;
 	}
@@ -2038,227 +2047,6 @@ static int ingenic_pinctrl_probe(struct platform_device *pdev)
 	return 0;
 }
 
-unsigned long ingenic_pinctrl_lock(int port)
-{
-	unsigned long flags;
-	struct ingenic_gpio_chip *chip;
-
-	if (port < 0 || port >= gpctl->num_chips) {
-		return 0;
-	}
-
-	chip = &gpctl->gpio_chips[port];
-
-	raw_spin_lock_irqsave(&chip->lock, flags);
-
-	return flags;
-}
-
-unsigned long ingenic_pinctrl_unlock(int port, unsigned long flags)
-{
-	struct ingenic_gpio_chip *chip;
-
-	if (port < 0 || port >= gpctl->num_chips) {
-		return 0;
-	}
-
-	chip = &gpctl->gpio_chips[port];
-
-	raw_spin_unlock_irqrestore(&chip->lock, flags);
-
-	return flags;
-}
-
-#ifdef CONFIG_PM_SLEEP
-#ifdef CONFIG_PINCTRL_DUMP
-static char dump_buf[PAGE_SIZE * 2];
-void dump_pinctl(void)
-{
-	struct ingenic_pinctrl *pctl = gpctl;
-	char *buf = dump_buf;
-	int cnt = 0;
-	int ret = 0;
-	cnt = dump_gpio(pctl->dev, NULL, buf);
-
-	do {
-		ret = printk("%s", buf);
-		if (ret == 0) {
-			break;
-		}
-
-		buf += ret - 1;
-		cnt -= ret;
-	} while (cnt > 0);
-
-	//ret1 = printk("%s\n", buf);
-}
-#else
-static void dump_pinctl(void) {}
-#endif
-
-static int ingenic_gpio_suspend_set(struct ingenic_gpio_chip *jzgc)
-{
-	const struct ingenic_priv *priv = jzgc->pctl->priv;
-	u32 pm_pull = 0, pm_nopull = 0, pm_pullup = 0, pm_pulldown = 0, pm_hiz = 0;
-	u32 pm_high = 0, pm_low = 0, pm_wakeup = 0;
-
-	u32 func0 = 0, func1 = 0, func2 = 0, func3 = 0;
-
-	/* save status from registers. */
-	jzgc->pm_bitmap[PM_RESUME_INT] = ingenic_gpio_readl(jzgc, PxINT);
-	jzgc->pm_bitmap[PM_RESUME_MSK] = ingenic_gpio_readl(jzgc, PxMSK);
-	jzgc->pm_bitmap[PM_RESUME_PAT0] = ingenic_gpio_readl(jzgc, PxPAT0);
-	jzgc->pm_bitmap[PM_RESUME_PAT1] = ingenic_gpio_readl(jzgc, PxPAT1);
-
-	/* 关闭唤醒源中断. */
-	if (jzgc->irq_bitmap & ~jzgc->wakeup_bitmap) {
-		ingenic_gpio_writel(jzgc, PxMSKS, jzgc->irq_bitmap & ~jzgc->wakeup_bitmap);
-	}
-	/* 打开唤醒源中断. */
-	if (jzgc->wakeup_bitmap) {
-		ingenic_gpio_writel(jzgc, PxMSKC, jzgc->wakeup_bitmap);
-	}
-
-	if (!priv->pull_tristate) {
-		jzgc->pm_bitmap[PM_RESUME_PULL] = ingenic_gpio_readl(jzgc, PxPEN);
-		pm_pull = jzgc->pm_bitmap[PM_SLEEP_PULL] & (~(jzgc->wakeup_bitmap));
-		pm_nopull = jzgc->pm_bitmap[PM_SLEEP_NOPULL] & (~(jzgc->wakeup_bitmap));
-	} else {
-		jzgc->pm_bitmap[PM_RESUME_PULLUP] = ingenic_gpio_readl(jzgc, PxPU);
-		jzgc->pm_bitmap[PM_RESUME_PULLDOWN] = ingenic_gpio_readl(jzgc, PxPD);
-
-		pm_pullup = jzgc->pm_bitmap[PM_SLEEP_PULLUP] & (~(jzgc->wakeup_bitmap));
-		pm_pulldown = jzgc->pm_bitmap[PM_SLEEP_PULLDOWN] & (~(jzgc->wakeup_bitmap));
-	}
-
-	pm_high = jzgc->pm_bitmap[PM_SLEEP_HIGH] & (~(jzgc->wakeup_bitmap));
-	pm_low  = jzgc->pm_bitmap[PM_SLEEP_LOW] & (~(jzgc->wakeup_bitmap));
-	pm_hiz  = jzgc->pm_bitmap[PM_SLEEP_HIZ] & (~(jzgc->wakeup_bitmap));
-	pm_wakeup = jzgc->pm_bitmap[PM_SLEEP_WAKEUP] & (~(jzgc->wakeup_bitmap));
-
-	func0   = jzgc->pm_bitmap[PM_SLEEP_FUNC0] & (~(jzgc->wakeup_bitmap));
-	func1   = jzgc->pm_bitmap[PM_SLEEP_FUNC1] & (~(jzgc->wakeup_bitmap));
-	func2   = jzgc->pm_bitmap[PM_SLEEP_FUNC2] & (~(jzgc->wakeup_bitmap));
-	func3   = jzgc->pm_bitmap[PM_SLEEP_FUNC3] & (~(jzgc->wakeup_bitmap));
-
-	if (pm_pull) {
-		ingenic_gpio_set_func(jzgc, priv->have_shadow, GPIO_INPUT, pm_pull);
-		ingenic_gpio_set_pull(jzgc, pm_pull, INGENIC_GPIO_PULLEN);
-	}
-	if (pm_nopull) {
-		ingenic_gpio_set_func(jzgc, priv->have_shadow, GPIO_INPUT, pm_nopull);
-		ingenic_gpio_set_pull(jzgc, pm_nopull, 0);
-	}
-
-	if (pm_pullup) {
-		ingenic_gpio_set_func(jzgc, priv->have_shadow, GPIO_INPUT, pm_pullup);
-		ingenic_gpio_set_pull(jzgc, pm_pullup, INGENIC_GPIO_PULLUP);
-	}
-	if (pm_pulldown) {
-		ingenic_gpio_set_func(jzgc, priv->have_shadow, GPIO_INPUT, pm_pulldown);
-		ingenic_gpio_set_pull(jzgc, pm_pulldown, INGENIC_GPIO_PULLDOWN);
-	}
-	if (pm_hiz) {
-		ingenic_gpio_set_func(jzgc, priv->have_shadow, GPIO_INPUT, pm_hiz);
-		ingenic_gpio_set_pull(jzgc, pm_hiz, INGENIC_GPIO_HIZ);
-	}
-
-	if (pm_high) {
-		ingenic_gpio_pins_set(jzgc, pm_high, 1);
-		ingenic_gpio_set_func(jzgc, priv->have_shadow, GPIO_OUTPUT1, pm_high);
-	}
-	if (pm_low) {
-		ingenic_gpio_pins_set(jzgc, pm_high, 0);
-		ingenic_gpio_set_func(jzgc, priv->have_shadow, GPIO_OUTPUT0, pm_low);
-	}
-
-	if (func0) {
-		ingenic_gpio_set_func(jzgc, priv->have_shadow, GPIO_FUNC_0, func0);
-	}
-	if (func1) {
-		ingenic_gpio_set_func(jzgc, priv->have_shadow, GPIO_FUNC_1, func1);
-	}
-	if (func2) {
-		ingenic_gpio_set_func(jzgc, priv->have_shadow, GPIO_FUNC_2, func2);
-	}
-	if (func3) {
-		ingenic_gpio_set_func(jzgc, priv->have_shadow, GPIO_FUNC_3, func3);
-	}
-
-	if (pm_wakeup) {
-		ingenic_gpio_set_func(jzgc, priv->have_shadow, GPIO_INT_RE_FE, pm_wakeup);
-	}
-
-	return 0;
-}
-
-static int ingenic_pinctrl_suspend(void)
-{
-	struct ingenic_pinctrl *pctl = gpctl;
-	int idx;
-
-	if (!gpctl) {
-		return 0;
-	}
-	dump_pinctl();
-	for (idx = 0; idx < pctl->num_chips; idx++) {
-		struct ingenic_gpio_chip *chip = &pctl->gpio_chips[idx];
-		ingenic_gpio_suspend_set(chip);
-		chip->resume_pending = 0;
-	}
-
-	dump_pinctl();
-	return 0;
-}
-
-static void ingenic_check_wakeup_gpio(struct ingenic_gpio_chip *jzgc)
-{
-	u32 pend, mask;
-
-	pend = ingenic_gpio_readl(jzgc, PxFLG);
-	mask = ingenic_gpio_readl(jzgc, PxMSK);
-	pend = pend & ~mask;
-	pend = pend & jzgc->wakeup_bitmap;
-	if (pend) {
-		jzgc->resume_pending = pend;
-		jzgc->sleep_level = ingenic_gpio_readl(jzgc, PxPAT0) & pend;
-	}
-}
-
-static void ingenic_pinctrl_resume(void)
-{
-	struct ingenic_pinctrl *pctl = gpctl;
-	int idx;
-
-	if (!gpctl) {
-		return;
-	}
-	for (idx = 0; idx < pctl->num_chips; idx++) {
-		struct ingenic_gpio_chip *jzgc = &pctl->gpio_chips[idx];
-		const struct ingenic_priv *priv = jzgc->pctl->priv;
-		ingenic_check_wakeup_gpio(jzgc);
-		ingenic_gpio_writel(jzgc, PxINT, jzgc->pm_bitmap[PM_RESUME_INT]);
-		ingenic_gpio_writel(jzgc, PxMSK, jzgc->pm_bitmap[PM_RESUME_MSK]);
-		ingenic_gpio_writel(jzgc, PxPAT0, jzgc->pm_bitmap[PM_RESUME_PAT0]);
-		ingenic_gpio_writel(jzgc, PxPAT1, jzgc->pm_bitmap[PM_RESUME_PAT1]);
-		if (!priv->pull_tristate) {
-			ingenic_gpio_writel(jzgc, PxPEN, jzgc->pm_bitmap[PM_RESUME_PULL]);
-		} else {
-			ingenic_gpio_writel(jzgc, PxPU, jzgc->pm_bitmap[PM_RESUME_PULLUP]);
-			ingenic_gpio_writel(jzgc, PxPD, jzgc->pm_bitmap[PM_RESUME_PULLDOWN]);
-		}
-	}
-}
-#else
-#define ingenic_pinctrl_suspend NULL
-#define ingenic_pinctrl_resume  NULL
-#endif
-
-static struct syscore_ops ingenic_pinctrl_syscore_ops = {
-	.suspend = ingenic_pinctrl_suspend,
-	.resume = ingenic_pinctrl_resume,
-};
-
 static const struct ingenic_priv common_priv_data[] = {
 	{
 		.have_shadow = true,
@@ -2386,44 +2174,16 @@ static struct platform_driver ingenic_pinctrl_drv = {
 
 static int __init ingenic_pinctrl_drv_init(void)
 {
-	register_syscore_ops(&ingenic_pinctrl_syscore_ops);
 	return platform_driver_register(&ingenic_pinctrl_drv);
 }
 postcore_initcall(ingenic_pinctrl_drv_init);
 
 static void __exit ingenic_pinctrl_drv_exit(void)
 {
-	unregister_syscore_ops(&ingenic_pinctrl_syscore_ops);
 	platform_driver_unregister(&ingenic_pinctrl_drv);
 	return;
 }
 module_exit(ingenic_pinctrl_drv_exit);
-
-int mcu_gpio_register(unsigned int ggpio, unsigned int reg)
-{
-	struct ingenic_pinctrl *pctl = gpctl;
-	struct ingenic_gpio_chip *jzgc = NULL;
-	if (!gpctl) {
-		return -ENODEV;
-	}
-	jzgc = &pctl->gpio_chips[ggpio];
-	jzgc->mcu_gpio_reg = (unsigned int *)reg;
-	return 0;
-}
-EXPORT_SYMBOL_GPL(mcu_gpio_register);
-
-void mcu_gpio_unregister(unsigned int ggpio)
-{
-	struct ingenic_pinctrl *pctl = gpctl;
-	struct ingenic_gpio_chip *jzgc = NULL;
-
-	if (!gpctl) {
-		return;
-	}
-	jzgc = &pctl->gpio_chips[ggpio];
-	jzgc->mcu_gpio_reg = NULL;
-}
-EXPORT_SYMBOL_GPL(mcu_gpio_unregister);
 
 MODULE_AUTHOR("cli <chen.li@ingenic.com>");
 MODULE_DESCRIPTION("Ingenic pinctrl driver");

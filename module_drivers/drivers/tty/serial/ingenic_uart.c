@@ -61,15 +61,15 @@ extern u32 ingenic_dma_read_dda(struct dma_chan *chan);
 extern int ingenic_dma_get_desc_index(struct dma_chan *chan, unsigned int doa, int desc_num);
 extern u32 ingenic_dma_read_dtc(struct dma_chan *chan);
 #else
-u32 ingenic_dma_read_dda(struct dma_chan *chan)
+static inline u32 ingenic_dma_read_dda(struct dma_chan *chan)
 {
 	return 0;
 };
-int ingenic_dma_get_desc_index(struct dma_chan *chan, unsigned int doa, int desc_num)
+static inline int ingenic_dma_get_desc_index(struct dma_chan *chan, unsigned int doa, int desc_num)
 {
 	return 0;
 };
-u32 ingenic_dma_read_dtc(struct dma_chan *chan)
+static inline u32 ingenic_dma_read_dtc(struct dma_chan *chan)
 {
 	return 0;
 };
@@ -516,10 +516,10 @@ static void ingenic_dma_rx(unsigned long data)
 static void ingenic_dma_tx_complete(void *arg)
 {
 	struct uart_ingenic_port *up = arg;
-	struct circ_buf *xmit = &up->port.state->xmit;
+	struct tty_port *tport = &up->port.state->port;
 
 	dma_unmap_sg(up->port.dev, &up->sg_tx, 1, (enum dma_data_direction)DMA_MEM_TO_DEV);
-	if (!(uart_tx_stopped(&up->port) || uart_circ_empty(xmit))) {
+	if (!(uart_tx_stopped(&up->port) || kfifo_is_empty(&tport->xmit_fifo))) {
 		tasklet_schedule(&up->tasklet_dma_tx);
 	}
 }
@@ -527,7 +527,8 @@ static void ingenic_dma_tx_complete(void *arg)
 static void ingenic_dma_tx(unsigned long data)
 {
 	struct uart_ingenic_port *up = (struct uart_ingenic_port *)data;
-	struct circ_buf *xmit = &up->port.state->xmit;
+	struct tty_port *tport = &up->port.state->port;
+	unsigned char *tail;
 	int bytes, lsr;
 	lsr = serial_in(up, UART_LSR);
 	check_modem_status(up);
@@ -535,7 +536,7 @@ static void ingenic_dma_tx(unsigned long data)
 		goto l1;
 	}
 
-	if (uart_tx_stopped(&up->port) || uart_circ_empty(xmit)) {
+	if (uart_tx_stopped(&up->port) || kfifo_is_empty(&tport->xmit_fifo)) {
 		tasklet_schedule(&up->tasklet_dma_tx);
 		return ;
 	}
@@ -546,30 +547,10 @@ static void ingenic_dma_tx(unsigned long data)
 		up->port.x_char = 0;
 		return ;
 	}
-	if (xmit->tail > xmit->head) {
-		bytes = CIRC_CNT(UART_XMIT_SIZE, xmit->tail, UART_XMIT_SIZE);
-		if (bytes > 32) {
-			sg_init_one(&up->sg_tx, xmit->buf + xmit->tail, 32);
-			xmit->tail = (xmit->tail + 32) & (UART_XMIT_SIZE - 1);
-			up->port.icount.tx += 32;
-		} else {
-			sg_init_one(&up->sg_tx, xmit->buf + xmit->tail, bytes);
-			xmit->tail = (xmit->tail + bytes) & (UART_XMIT_SIZE - 1);
-			up->port.icount.tx += bytes;
-			xmit->tail = 0;
-		}
-	} else {
-		bytes = CIRC_CNT(xmit->head, xmit->tail, UART_XMIT_SIZE);
-		if (bytes > 32) {
-			sg_init_one(&up->sg_tx, xmit->buf + xmit->tail, 32);
-			xmit->tail = (xmit->tail + 32) & (UART_XMIT_SIZE - 1);
-			up->port.icount.tx += 32;
-		} else {
-			sg_init_one(&up->sg_tx, xmit->buf + xmit->tail, bytes);
-			xmit->tail = (xmit->tail + bytes) & (UART_XMIT_SIZE - 1);
-			up->port.icount.tx += bytes;
-		}
-	}
+	/* at most 32 bytes, and no further than the end of the buffer */
+	bytes = kfifo_out_linear_ptr(&tport->xmit_fifo, &tail, 32);
+	sg_init_one(&up->sg_tx, tail, bytes);
+	uart_xmit_advance(&up->port, bytes);
 	dma_map_sg(up->port.dev, &up->sg_tx, 1, (enum dma_data_direction)DMA_MEM_TO_DEV);
 	up->desc_tx = dmaengine_prep_slave_sg(up->chan_tx,
 	                                      &up->sg_tx,
@@ -583,7 +564,7 @@ static void ingenic_dma_tx(unsigned long data)
 	up->desc_tx->callback_param = up;
 	dmaengine_submit(up->desc_tx);
 	dma_async_issue_pending(up->chan_tx);
-	if (uart_circ_chars_pending(xmit) < WAKEUP_CHARS) {
+	if (kfifo_len(&tport->xmit_fifo) < WAKEUP_CHARS) {
 		uart_write_wakeup(&up->port);
 	}
 	return ;
@@ -705,7 +686,8 @@ ignore_char:
 /* transmit one char*/
 static void transmit_chars(struct uart_ingenic_port *up)
 {
-	struct circ_buf *xmit = &up->port.state->xmit;
+	struct tty_port *tport = &up->port.state->port;
+	unsigned char ch;
 	int count;
 	if (up->port.x_char) {
 		serial_out(up, UART_TX, up->port.x_char);//transmit char=port.x_char
@@ -713,7 +695,7 @@ static void transmit_chars(struct uart_ingenic_port *up)
 		up->port.x_char = 0;//transmit finish x_char=0
 		return;
 	}
-	if (uart_circ_empty(xmit) || uart_tx_stopped(&up->port)) {//xmit is empty or stop tx
+	if (kfifo_is_empty(&tport->xmit_fifo) || uart_tx_stopped(&up->port)) {//xmit is empty or stop tx
 		serial_ingenic_stop_tx(&up->port);
 		return;
 	}
@@ -721,16 +703,15 @@ static void transmit_chars(struct uart_ingenic_port *up)
 	/* try to tx char until xmit is empty or count=0*/
 	count = up->port.fifosize / 2;
 	do {
-		serial_out(up, UART_TX, xmit->buf[xmit->tail]);
-		xmit->tail = (xmit->tail + 1) & (UART_XMIT_SIZE - 1);
-		up->port.icount.tx++;
-		if (uart_circ_empty(xmit)) {
+		/* takes the character out of the buffer and counts it */
+		if (!uart_fifo_get(&up->port, &ch)) {
 			break;
 		}
+		serial_out(up, UART_TX, ch);
 	} while (--count > 0);
 
 	/*if circ_chars is less than WARKUP_CHARS,then warkup   */
-	if (uart_circ_chars_pending(xmit) < WAKEUP_CHARS) { //get the renainder of circ_chars
+	if (kfifo_len(&tport->xmit_fifo) < WAKEUP_CHARS) { //get the renainder of circ_chars
 		uart_write_wakeup(&up->port);
 	}
 
@@ -1562,6 +1543,7 @@ static const struct file_operations port_regs_ops = {
 
 static const struct of_device_id serial_ingenic_of_match[] = {
 	{.compatible = "ingenic,8250-uart", .data = NULL},
+	{ /* sentinel */ }
 };
 
 MODULE_DEVICE_TABLE(of, serial_ingenic_of_match);
@@ -1634,16 +1616,14 @@ static int serial_ingenic_probe(struct platform_device *pdev)
 		dma_cap_set(DMA_SLAVE, mask);
 
 		up->chan_rx = dma_request_chan(&pdev->dev, "rx");
-		if (up->chan_rx < 0) {
+		if (IS_ERR(up->chan_rx)) {
 			dev_err(up->port.dev, "%s:dma_request_channel FAILS(rx)\n", __func__);
-			dma_release_channel(up->chan_rx);
 			return 0;
 		}
 
 		up->chan_tx = dma_request_chan(&pdev->dev, "tx");
-		if (up->chan_tx < 0) {
+		if (IS_ERR(up->chan_tx)) {
 			dev_err(up->port.dev, "%s:dma_request_channel FAILS(tx)\n", __func__);
-			dma_release_channel(up->chan_tx);
 			return 0;
 		}
 
@@ -1688,7 +1668,7 @@ static int serial_ingenic_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int serial_ingenic_remove(struct platform_device *pdev)
+static void serial_ingenic_remove(struct platform_device *pdev)
 {
 	struct uart_ingenic_port *up = platform_get_drvdata(pdev);
 
@@ -1704,8 +1684,6 @@ static int serial_ingenic_remove(struct platform_device *pdev)
 	if (up->clk) {
 		clk_disable_unprepare(up->clk);
 	}
-
-	return 0;
 }
 
 static struct platform_driver serial_ingenic_driver = {
@@ -1722,7 +1700,7 @@ static struct platform_driver serial_ingenic_driver = {
 	},
 };
 
-int __init serial_ingenic_init(void)
+static int __init serial_ingenic_init(void)
 {
 	int ret;
 	ret = uart_register_driver(&serial_ingenic_reg);
@@ -1738,7 +1716,7 @@ int __init serial_ingenic_init(void)
 	return ret;
 }
 
-void __exit serial_ingenic_exit(void)
+static void __exit serial_ingenic_exit(void)
 {
 	platform_driver_unregister(&serial_ingenic_driver);
 	uart_unregister_driver(&serial_ingenic_reg);
