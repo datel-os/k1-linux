@@ -95,6 +95,26 @@ static void dwc2_set_x2000_params(struct dwc2_hsotg *hsotg)
 	p->phy_utmi_width = 16;
 	p->activate_ingenic_overcurrent_detection =
 		!device_property_read_bool(hsotg->dev, "disable-over-current");
+
+	if (IS_ENABLED(CONFIG_MACH_XBURST2)) {
+		/* As the SDK's driver for this controller sets it */
+		p->ahbcfg = GAHBCFG_HBSTLEN_INCR16 << GAHBCFG_HBSTLEN_SHIFT;
+		/*
+		 * The SDK's driver never writes PCGCTL: it neither gates the
+		 * clocks nor powers the core down when the bus is suspended.
+		 */
+		p->power_down = DWC2_POWER_DOWN_PARAM_NONE;
+		p->no_clock_gating = true;
+	}
+
+	/*
+	 * Datel OS: descriptor DMA for the host. The core then walks a list
+	 * of transfers by itself and interrupts once per URB; in buffer DMA
+	 * every microframe of an isochronous endpoint is a transfer of its
+	 * own, 8000 interrupts a second for a high-speed camera.
+	 */
+	p->dma_desc_enable = p->host_dma && hsotg->hw_params.dma_desc_enable &&
+		device_property_read_bool(hsotg->dev, "ingenic,host-dma-desc");
 }
 
 static void dwc2_set_s3c6400_params(struct dwc2_hsotg *hsotg)
