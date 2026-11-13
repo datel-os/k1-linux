@@ -17,7 +17,7 @@ Mainline has drivers for some of the X2000 (pin control, USB, SPI, Ethernet) but
 | Part | Phase A: carried over | Phase B: rewritten |
 |---|---|---|
 | Platform (`arch/mips/xburst2`), boot image | carried over, not run yet | not yet |
-| Clocks, timer, interrupt controller | not yet | not yet |
+| Clocks, timer, interrupt controller | carried over, not run yet | not yet |
 | Pin control, serial | not yet | not yet |
 | MMC, DMA, I2C | not yet | not yet |
 | USB | not yet | not yet |
