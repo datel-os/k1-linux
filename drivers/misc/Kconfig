@@ -5,6 +5,18 @@
 
 menu "Misc devices"
 
+config K1OS_HELIX
+	bool "Helix video codec of the Ingenic X2000 for programs (/dev/helix)"
+	depends on MACH_XBURST2 && OF
+	help
+	  Gives programs the power, the interrupt and memory of the Helix
+	  codec (H.264 and JPEG encoder, JPEG decoder); they build the codec's
+	  jobs themselves, as Datel OS's k1os-camera does. Nothing in the
+	  kernel reads the pictures.
+
+	  The memory comes from the reserved area the codec's node names as
+	  its memory-region.
+
 config SENSORS_LIS3LV02D
 	tristate
 	depends on INPUT
