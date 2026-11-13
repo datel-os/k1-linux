@@ -19,7 +19,7 @@ Mainline has drivers for some of the X2000 (pin control, USB, SPI, Ethernet) but
 | Platform (`arch/mips/xburst2`), boot image | carried over, not run yet | not yet |
 | Clocks, timer, interrupt controller | carried over, not run yet | not yet |
 | Pin control, serial | carried over, not run yet | not yet |
-| MMC, DMA, I2C | not yet | not yet |
+| MMC, DMA, I2C | carried over, not run yet | not yet |
 | USB | not yet | not yet |
 | TCU, watchdog | not yet | not yet |
 | The K1 board: device tree, `k1_defconfig`, Helix codec driver, pstore | not yet | not yet |
