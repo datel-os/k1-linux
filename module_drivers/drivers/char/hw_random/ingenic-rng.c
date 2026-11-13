@@ -224,7 +224,7 @@ err_register:
 	return ret;
 }
 
-static int ingenic_trng_remove(struct platform_device *pdev)
+static void ingenic_trng_remove(struct platform_device *pdev)
 {
 	struct ingenic_trng *trng = platform_get_drvdata(pdev);
 	unsigned int trng_cfg;
@@ -236,8 +236,6 @@ static int ingenic_trng_remove(struct platform_device *pdev)
 	writel(trng_cfg, trng->base + TRNG_CFG);
 
 	clk_disable_unprepare(trng->clk_gate);
-
-	return 0;
 }
 
 #ifdef CONFIG_PM

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0
+obj-y += char/
 obj-y += clk/
 obj-y += clocksource/
 obj-y += dma/
