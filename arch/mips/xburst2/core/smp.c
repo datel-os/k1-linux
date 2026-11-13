@@ -115,7 +115,7 @@ ipi_finish:
 	return IRQ_HANDLED;
 }
 
-void percpu_mailbox_init(int cpu)
+static void percpu_mailbox_init(int cpu)
 {
 	smp_core.mailbox[cpu].iobase = ioremap(CCU_IO_BASE + cpu * 4 + 0x1000, 4);
 	raw_spin_lock_init(&smp_core.mailbox[cpu].lock);
@@ -218,11 +218,6 @@ static void build_bounce_code(struct xburst2_smp *smp)
 
 #define STATUS_BITS  (ST0_CU0)
 #define CAUSE_BITS   (1 << 27)
-#define C0_CAUSE     13,0
-#define C0_STATUS    12,0
-#define C0_COUNT    9,0
-
-
 #define C0_CONFIG_0  16,0
 #define V0      2
 #define V1      3
@@ -383,15 +378,6 @@ static void xburst2_send_ipi_mask(const struct cpumask *mask, unsigned int actio
 		}
 	}
 }
-/**
- * all cpu finish
- */
-void xburst2_cpus_done(void)
-{
-	// FIXME: will remove this code.
-	pr_debug("[SMP]: xburst2_cpus_done\n");
-}
-
 #ifdef CONFIG_HOTPLUG_CPU
 
 void ingenic_percpu_timerevent_deinit(void);
@@ -429,7 +415,7 @@ static int xburst2_cpu_disable(void)
 	return 0;
 }
 
-void xburst2_cpu_die(unsigned int cpu)
+static void xburst2_cpu_die(unsigned int cpu)
 {
 	unsigned int timeout = 0x100000;
 	unsigned int reset;
@@ -450,7 +436,7 @@ void xburst2_cpu_die(unsigned int cpu)
 	//TODO: clk disable.
 	pr_info("SMP[%d] is disabled\n", cpu);
 }
-#endif
+
 //cpu idle loop will enter it.
 void play_dead(void)
 {
@@ -487,6 +473,8 @@ void play_dead(void)
 		                    );
 	}
 }
+
+#endif
 
 struct plat_smp_ops xburst2_smp_ops = {
 	.send_ipi_single    = xburst2_send_ipi_single,

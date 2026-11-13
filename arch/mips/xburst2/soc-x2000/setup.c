@@ -23,6 +23,8 @@
 #include <linux/clocksource.h>
 
 #include <asm/prom.h>
+#include <asm/time.h>
+#include <core_base.h>
 #include <soc/base.h>
 #include <soc/ddr.h>
 
@@ -30,26 +32,8 @@ static int ddr_size = 0;
 module_param(ddr_size, int, S_IRUGO);
 MODULE_PARM_DESC(ddr_size, "ddr size");
 
-void __init cpm_reset(void)
-{
-}
 
-int __init setup_init(void)
-{
-#if 0
-	cpm_reset();
-	/* Set bus priority here */
-	*(volatile unsigned int *)0xb34f0240 = 0x00010003;
-	*(volatile unsigned int *)0xb34f0244 = 0x00010003;
-#endif
-
-	return 0;
-}
-extern void __init init_all_clk(void);
-/* used by linux-mti code */
-extern void *get_fdt_addr(void);
-
-void __init init_ddr_size(void)
+static void __init init_ddr_size(void)
 {
 	unsigned int ddr_cfg = 0;
 	unsigned int col0 = 0;
@@ -82,7 +66,6 @@ void __init plat_mem_setup(void)
 	ioport_resource.end = 0xffffffff;
 	iomem_resource.start    = 0x00000000;
 	iomem_resource.end  = 0xffffffff;
-	setup_init();
 	init_ddr_size();
 
 	__dt_setup_arch(get_fdt_addr());

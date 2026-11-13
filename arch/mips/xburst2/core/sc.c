@@ -100,8 +100,8 @@ static inline int __init mips_sc_probe(void)
 		return 0;
 	}
 
-	switch (c->processor_id & PRID_CPU_FEATURE_MASK) {
-	case PRID_CPU_X2000:
+	switch (c->processor_id & (PRID_OPT_MASK | PRID_COMP_MASK)) {
+	case PRID_COMP_INGENIC_13:	/* X2000 */
 		break;
 	default:
 		printk("pls check processor_id[0x%08x],sc_jz not support!\n", c->processor_id);

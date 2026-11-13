@@ -21,6 +21,7 @@
 #include <linux/of_fdt.h>
 
 #include <soc/base.h>
+#include <core_base.h>
 
 static __init void prom_init_cmdline(int argc, char *argv[])
 {
@@ -64,10 +65,6 @@ void __init prom_init(void)
 #ifdef CONFIG_SMP
 	register_smp_ops(&xburst2_smp_ops);
 #endif
-}
-
-void __init prom_free_prom_memory(void)
-{
 }
 
 const char *get_system_type(void)

@@ -6,6 +6,7 @@
  */
 
 #include <asm/io.h>
+#include <asm/setup.h>
 
 #include <soc/base.h>
 
@@ -67,28 +68,3 @@ void prom_putchar(char c)
 {
 	putchar_f(c);
 }
-
-void prom_putstr(char *s)
-{
-	while (*s) {
-		if (*s == '\n') {
-			putchar_f('\r');
-		}
-		putchar_f(*s);
-		s++;
-	}
-}
-
-#if 1
-static char pbuffer[4096];
-void prom_printk(const char *fmt, ...)
-{
-	va_list args;
-
-	va_start(args, fmt);
-	vsnprintf(pbuffer, 4096, fmt, args);
-	va_end(args);
-
-	prom_putstr(pbuffer);
-}
-#endif

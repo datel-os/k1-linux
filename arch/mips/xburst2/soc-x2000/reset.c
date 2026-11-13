@@ -26,8 +26,6 @@
 
 #include <asm/reboot.h>
 
-#include <ingenic_proc.h>
-
 #define RTC_RTCCR       (0x00)  /* rw, 32, 0x00000081 */
 #define RTC_RTCSR       (0x04)  /* rw, 32, 0x???????? */
 #define RTC_RTCSAR      (0x08)  /* rw, 32, 0x???????? */
@@ -85,7 +83,7 @@ static void __attribute__((unused)) wdt_stop_count(void)
 	outl(1 << 16, TCU_IOBASE + TCU_TSSR);
 }
 
-static int inline rtc_write_reg(int reg, int value)
+static inline int rtc_write_reg(int reg, int value)
 {
 	int timeout = 0x2000;
 	while (!(inl(RTC_IOBASE + RTC_RTCCR) & RTCCR_WRDY) && timeout--);
@@ -107,7 +105,7 @@ static int inline rtc_write_reg(int reg, int value)
  * Function: Keep power for CPU core when reset.
  * So that EPC, tcsm and so on can maintain it's status after reset-key pressed.
  */
-static int inline reset_keep_power(void)
+static inline int reset_keep_power(void)
 {
 	return rtc_write_reg(RTC_PWRONCR,
 	                     inl(RTC_IOBASE + RTC_PWRONCR) & ~(1 << 0));
@@ -116,7 +114,7 @@ static int inline reset_keep_power(void)
 #define HWFCR_WAIT_TIME(x) ((x > 0x7fff ? 0x7fff: (0x7ff*(x)) / 2000) << 5)
 #define HRCR_WAIT_TIME(x) ((((x) > 1875 ? 1875: (x)) / 125) << 11)
 
-void jz_hibernate(void)
+static void jz_hibernate(void)
 {
 	uint32_t rtc_rtccr;
 
@@ -149,7 +147,7 @@ void jz_hibernate(void)
 	}
 }
 
-void jz_wdt_restart(char *command)
+static void jz_wdt_restart(char *command)
 {
 	printk("Restarting after 4 ms\n");
 	if ((command != NULL) && !strcmp(command, "recovery")) {
@@ -173,165 +171,10 @@ void jz_wdt_restart(char *command)
 	}
 }
 
-static void hibernate_restart(void)
-{
-	uint32_t rtc_rtcsr, rtc_rtccr;
-
-	while (!(inl(RTC_IOBASE + RTC_RTCCR) & RTCCR_WRDY));
-
-	rtc_rtcsr = inl(RTC_IOBASE + RTC_RTCSR);
-	rtc_rtccr = inl(RTC_IOBASE + RTC_RTCCR);
-
-	rtc_write_reg(RTC_RTCSAR, rtc_rtcsr + 5);
-	rtc_rtccr &= ~(1 << 4 | 1 << 1);
-	rtc_rtccr |= 0x3 << 2;
-	rtc_write_reg(RTC_RTCCR, rtc_rtccr);
-
-	/* Clear reset status */
-	cpm_outl(0, CPM_RSR);
-
-	/* Set minimum wakeup_n pin low-level assertion time for wakeup: 1000ms */
-	rtc_write_reg(RTC_HWFCR, HWFCR_WAIT_TIME(1000));
-
-	/* Set reset pin low-level assertion time after wakeup: must  > 60ms */
-	rtc_write_reg(RTC_HRCR, HRCR_WAIT_TIME(125));
-
-	/* clear wakeup status register */
-	rtc_write_reg(RTC_HWRSR, 0x0);
-
-	rtc_write_reg(RTC_HWCR, 0x1);
-
-
-	rtc_rtccr = inl(RTC_IOBASE + RTC_RTCCR);
-	rtc_rtccr |= 0x1 << 0;
-	rtc_write_reg(RTC_RTCCR, rtc_rtccr);
-
-
-	/* Put CPU to hibernate mode */
-	rtc_write_reg(RTC_HCR, 0x1);
-
-	mdelay(200);
-	while (1) {
-		printk("%s:We should NOT come here.%08x\n", __func__, inl(RTC_IOBASE + RTC_HCR));
-	}
-}
-
-#ifdef CONFIG_HIBERNATE_RESET
-void jz_hibernate_restart(char *command)
-{
-	local_irq_disable();
-
-	if ((command != NULL) && !strcmp(command, "recovery")) {
-		jz_wdt_restart(command);
-	}
-
-	hibernate_restart();
-}
-#endif
-
-int __init reset_init(void)
+static int __init reset_init(void)
 {
 	pm_power_off = jz_hibernate;
-#ifdef CONFIG_HIBERNATE_RESET
-	_machine_restart = jz_hibernate_restart;
-#else
 	_machine_restart = jz_wdt_restart;
-#endif
 	return 0;
 }
 arch_initcall(reset_init);
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-struct wdt_reset {
-	unsigned stop;
-	unsigned msecs;
-	unsigned count;
-};
-
-/* ============================reset proc=================================== */
-static char *reset_command[] = {"wdt", "hibernate", "recovery", "poweroff"};
-
-static int reset_show(struct seq_file *filq, void *v)
-{
-	int len = 0, i;
-
-	for (i = 0; i < ARRAY_SIZE(reset_command); i++) {
-		seq_printf(filq, "%s\t", reset_command[i]);
-	}
-	seq_printf(filq, "\n");
-
-	return len;
-}
-
-static int reset_write(struct file *file, const char __user *buffer,
-                       size_t usize, loff_t *off)
-{
-	int command_size = 0;
-	int i;
-
-	if (usize == 0) {
-		return -EINVAL;
-	}
-
-	command_size = ARRAY_SIZE(reset_command);
-	for (i = 0; i < command_size; i++) {
-		if (!strncmp(buffer, reset_command[i], strlen(reset_command[i]))) {
-			break;
-		}
-	}
-	if (i == command_size) {
-		return -EINVAL;
-	}
-
-	local_irq_disable();
-	switch (i) {
-		case 0:
-			jz_wdt_restart(NULL);
-			break;
-		case 1:
-			hibernate_restart();
-			break;
-		case 2:
-			jz_wdt_restart("recovery");
-			break;
-		case 3:
-			jz_hibernate();
-			break;
-		default:
-			printk("not support command %d\n", i);
-	}
-
-	return usize;
-}
-static struct jz_single_file_ops reset_proc_fops = {
-	.read = reset_show,
-	.write = reset_write,
-};
-/* ============================reset proc end=============================== */
-
-static int __init init_reset(void)
-{
-	struct wdt_reset *wdt;
-	struct proc_dir_entry *p, *res;
-
-	wdt = kmalloc(sizeof(struct wdt_reset), GFP_KERNEL);
-	if (!wdt) {
-		return -ENOMEM;
-	}
-
-	wdt->count = 0;
-	wdt->msecs = 3000;
-
-	wdt->stop = 1;
-
-	p = jz_proc_mkdir("reset");
-	if (!p) {
-		pr_warn("create_proc_entry for common reset failed.\n");
-		return -ENODEV;
-	}
-
-	res = jz_proc_create_data("reset", 0444, p, &reset_proc_fops, wdt);
-
-	return 0;
-}
-module_init(init_reset);
