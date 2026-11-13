@@ -961,7 +961,7 @@ err_free:
 	return ret;
 }
 
-static int ingenic_tcu_remove(struct platform_device *pdev)
+static void ingenic_tcu_remove(struct platform_device *pdev)
 {
 	struct ingenic_tcu *tcu = platform_get_drvdata(pdev);
 
@@ -971,8 +971,6 @@ static int ingenic_tcu_remove(struct platform_device *pdev)
 	platform_set_drvdata(pdev, NULL);
 	free_irq(tcu->irq, tcu);
 	kfree(tcu);
-
-	return 0;
 }
 static const struct of_device_id tcu_match[] = {
 	{ .compatible = "ingenic,tcu", .data = NULL },

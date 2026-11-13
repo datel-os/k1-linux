@@ -584,7 +584,7 @@ err_nomem:
 	return ret;
 }
 
-static int ingenic_rtc_remove(struct platform_device *pdev)
+static void ingenic_rtc_remove(struct platform_device *pdev)
 {
 	struct ingenic_rtc *rtc = platform_get_drvdata(pdev);
 
@@ -599,7 +599,6 @@ static int ingenic_rtc_remove(struct platform_device *pdev)
 	release_resource(rtc->res);
 	kfree(rtc);
 	platform_set_drvdata(pdev, NULL);
-	return 0;
 }
 
 #ifdef CONFIG_PM

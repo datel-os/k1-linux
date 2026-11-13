@@ -143,8 +143,6 @@ static irqreturn_t ingenic_wdt_interrupt(int irq, void *dev_id)
  * zone), past a console lock a frozen CPU might hold. If this never fires
  * before a watchdog reset, the CPU that owns the line had interrupts off
  * the whole time - also an answer. */
-extern void nebulaos_core_ost_dump(void);
-
 static irqreturn_t nebulaos_wdt_pretimeout(int irq, void *dev_id)
 {
 	struct ingenic_wdt_drvdata *drvdata = dev_id;
@@ -276,7 +274,7 @@ static const struct of_device_id ingenic_wdt_of_matches[] = {
 	{ .compatible = "ingenic,watchdog", .data = NULL },
 	{},
 };
-MODULE_DEVICE_TABLE(of, ingenic_wdt_of_matches)
+MODULE_DEVICE_TABLE(of, ingenic_wdt_of_matches);
 
 #ifdef CONFIG_PM_SLEEP
 static int ingenic_wdt_suspend(struct device *dev)
@@ -474,7 +472,7 @@ err_out:
 	return ret;
 }
 
-static int ingenic_wdt_remove(struct platform_device *pdev)
+static void ingenic_wdt_remove(struct platform_device *pdev)
 {
 	struct ingenic_wdt_drvdata *drvdata = platform_get_drvdata(pdev);
 
@@ -487,7 +485,6 @@ static int ingenic_wdt_remove(struct platform_device *pdev)
 	clk_put(drvdata->wdt_clk);
 	clk_put(drvdata->tcu_clk);
 
-	return 0;
 }
 
 static struct platform_driver ingenic_wdt_driver = {
