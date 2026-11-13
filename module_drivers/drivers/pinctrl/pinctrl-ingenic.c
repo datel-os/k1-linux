@@ -573,22 +573,14 @@ static void ingenic_gpio_irq_handler(struct irq_desc *desc)
 	unsigned long pend, mask;
 	unsigned long i;
 
-	if (IS_ERR_OR_NULL(jzgc->mcu_gpio_reg)) {
-		mask = ingenic_gpio_readl(jzgc, PxMSK);
-		pend = ingenic_gpio_readl(jzgc, PxFLG);
-		pend = pend & ~mask;
-	} else {
-		pend = *(jzgc->mcu_gpio_reg);
-	}
+	mask = ingenic_gpio_readl(jzgc, PxMSK);
+	pend = ingenic_gpio_readl(jzgc, PxFLG);
+	pend = pend & ~mask;
 
 	for_each_set_bit(i, &pend, jzgc->gc.ngpio) {
 		if (irq_find_mapping(jzgc->irq_domain, i)) {
 			generic_handle_irq(irq_find_mapping(jzgc->irq_domain, i));
 		}
-	}
-
-	if (!IS_ERR_OR_NULL(jzgc->mcu_gpio_reg)) {
-		*(jzgc->mcu_gpio_reg) = 0;
 	}
 	return;
 }
