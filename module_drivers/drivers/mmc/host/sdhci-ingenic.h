@@ -91,6 +91,9 @@ struct sdhci_ingenic {
 };
 
 int ingenic_sdio_wlan_init(struct device *dev, int index);
+void rtc32k_enable(void);
+void rtc32k_disable(void);
+int ingenic_bcmdhd_wlan_power_onoff(int flag);
 int ingenic_sdio_wlan_deinit(struct device *dev);
 /* OpenKE (2026-07-22, FIRMWARE.md sec 52): sec 47 renamed these to
  * sdhci_ingenic_mmc_clk_ctrl/sdhci_ingenic_mmc_manual_detect to dodge a real

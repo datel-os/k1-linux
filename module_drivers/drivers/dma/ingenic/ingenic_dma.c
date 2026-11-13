@@ -45,7 +45,7 @@
 #define AHB_MCU_PDMA    1
 
 /* tsz for 1,2,4,8,16,32,64 128bytes */
-const static char dcm_tsz[8] = { 1, 2, 0, 0, 3, 4, 5, 6};
+static const char dcm_tsz[8] = { 1, 2, 0, 0, 3, 4, 5, 6};
 
 u32 ingenic_dma_read_dtc(struct dma_chan *chan)
 {

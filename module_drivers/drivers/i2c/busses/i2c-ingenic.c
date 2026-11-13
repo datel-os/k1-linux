@@ -1123,14 +1123,13 @@ static int i2c_ingenic_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int i2c_ingenic_remove(struct platform_device *pdev)
+static void i2c_ingenic_remove(struct platform_device *pdev)
 {
 	struct i2c_ingenic *i2c = platform_get_drvdata(pdev);
 	if ((!IS_ERR(i2c->clk)) && (!i2c->clk_always_enable)) {
 		clk_disable_unprepare(i2c->clk);
 	}
 	i2c_del_adapter(&i2c->adap);
-	return 0;
 }
 
 static int i2c_ingenic_suspend(struct platform_device *pdev, pm_message_t state)

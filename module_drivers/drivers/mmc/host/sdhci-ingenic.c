@@ -201,7 +201,7 @@ static void sdhci_ingenic_set_clock(struct sdhci_host *host, unsigned int clock)
 #define INGENIC_TYPE_3  0x3     //100
 
 #if (!defined(CONFIG_SOC_X2500))
-void sdhci_ingenic_voltage_switch(struct sdhci_host *host)
+static void sdhci_ingenic_voltage_switch(struct sdhci_host *host)
 {
 	struct sdhci_ingenic *sdhci_ing = sdhci_priv(host);
 	struct sdhci_ingenic_pdata *pdata = sdhci_ing->pdata;
@@ -226,23 +226,7 @@ void sdhci_ingenic_voltage_switch(struct sdhci_host *host)
 }
 #endif
 
-void sdhci_ingenic_power_set(struct sdhci_host *host, int onoff)
-{
-	struct sdhci_ingenic *sdhci_ing = sdhci_priv(host);
-	struct sdhci_ingenic_pdata *pdata = sdhci_ing->pdata;
-
-	if (!IS_ERR(pdata->gpio->pwr)) {
-		if (onoff) {
-			gpiod_set_value(pdata->gpio->pwr, 1);
-		} else {
-			gpiod_set_value(pdata->gpio->pwr, 0);
-		}
-	} else {
-		return ;
-	}
-}
-
-void ingenic_sdhci_hwreset(struct sdhci_host *host)
+static void ingenic_sdhci_hwreset(struct sdhci_host *host)
 {
 	struct sdhci_ingenic *sdhci_ing = sdhci_priv(host);
 	struct sdhci_ingenic_pdata *pdata = sdhci_ing->pdata;
@@ -289,7 +273,6 @@ static struct sdhci_ops sdhci_ingenic_ops = {
 	.set_bus_width          = sdhci_set_bus_width,
 	.reset              = sdhci_reset,
 	.set_uhs_signaling      = sdhci_set_uhs_signaling,
-	//  .power_set          = sdhci_ingenic_power_set,
 	.hw_reset           = ingenic_sdhci_hwreset,
 	.adma_write_desc        = ingenic_sdhci_adma_write_desc,
 #if (!defined(CONFIG_SOC_X2500) && !defined(CONFIG_SOC_X2600) && !defined(CONFIG_SOC_AD100))
@@ -769,7 +752,6 @@ static int sdhci_ingenic_probe(struct platform_device *pdev)
 	host->irq = irq;
 
 	/* Software redefinition caps */
-	host->quirks |= SDHCI_QUIRK_MISSING_CAPS;
 	host->caps  = CAPABILITIES1_SW;
 	host->caps1 = CAPABILITIES2_SW;
 
@@ -869,7 +851,7 @@ static int sdhci_ingenic_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int sdhci_ingenic_remove(struct platform_device *pdev)
+static void sdhci_ingenic_remove(struct platform_device *pdev)
 {
 	struct sdhci_host *host =  platform_get_drvdata(pdev);
 	struct sdhci_ingenic *sdhci_ing = sdhci_priv(host);
@@ -892,10 +874,7 @@ static int sdhci_ingenic_remove(struct platform_device *pdev)
 	clk_disable_unprepare(sdhci_ing->clk_cgu);
 	/* clk_disable_unprepare(sdhci_ing->clk_gate); */
 
-	sdhci_free_host(host);
 	platform_set_drvdata(pdev, NULL);
-
-	return 0;
 }
 
 #ifdef CONFIG_PM

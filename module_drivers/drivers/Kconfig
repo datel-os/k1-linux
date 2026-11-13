@@ -18,3 +18,15 @@ endmenu
 menu "[UART] Drivers"
 source "module_drivers/drivers/tty/serial/Kconfig"
 endmenu
+
+menu "[MSC] (eMMC/SD/SDIO) and Device Drivers"
+source "module_drivers/drivers/mmc/host/Kconfig"
+endmenu
+
+menu "[DMA] Drivers"
+source "module_drivers/drivers/dma/ingenic/Kconfig"
+endmenu
+
+menu "[I2C] Master Drivers"
+source "module_drivers/drivers/i2c/busses/Kconfig"
+endmenu
