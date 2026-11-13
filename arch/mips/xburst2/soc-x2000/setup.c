@@ -51,11 +51,6 @@ static void __init init_ddr_size(void)
 	pr_info("ddr_size: %d MBytes\n", ddr_size);
 }
 
-unsigned int __init arch_get_ddr_size(void)
-{
-	return ddr_size;
-}
-
 void __init plat_mem_setup(void)
 {
 	/* use IO_BASE, so that we can use phy addr on hard manual
