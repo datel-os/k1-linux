@@ -124,6 +124,11 @@ static void dwc2_sof_intr(struct dwc2_hsotg *hsotg)
 
 	dwc2_track_missed_sofs(hsotg);
 
+	/* Isochronous URBs that are done without an interrupt for them */
+	if (hsotg->params.dma_desc_enable &&
+	    !dwc2_micro_frame_num(hsotg->frame_number))
+		dwc2_hcd_isoc_poll_ddma(hsotg);
+
 	/* Determine whether any periodic QHs should be executed */
 	qh_entry = hsotg->periodic_sched_inactive.next;
 	while (qh_entry != &hsotg->periodic_sched_inactive) {

@@ -1880,6 +1880,18 @@ static int dwc2_hcd_urb_enqueue(struct dwc2_hsotg *hsotg,
 		return retval;
 	}
 
+	/*
+	 * An isochronous channel that is running in descriptor DMA mode gets
+	 * the descriptors of the new URB now. Left to the next
+	 * transfer-complete interrupt, the URB waits for them for as long as
+	 * the one before it lasts, and when that one was the last one out,
+	 * the list has run empty with URBs waiting and starts anew.
+	 */
+	if (hsotg->params.dma_desc_enable &&
+	    qh->ep_type == USB_ENDPOINT_XFER_ISOC &&
+	    qh->channel && qh->channel->xfer_started)
+		dwc2_hcd_start_xfer_ddma(hsotg, qh);
+
 	intr_mask = dwc2_readl(hsotg, GINTMSK);
 	if (!(intr_mask & GINTSTS_SOF)) {
 		enum dwc2_transaction_type tr_type;
@@ -5037,6 +5049,9 @@ static void dwc2_hcd_free(struct dwc2_hsotg *hsotg)
 	dwc2_qh_list_free(hsotg, &hsotg->periodic_sched_ready);
 	dwc2_qh_list_free(hsotg, &hsotg->periodic_sched_assigned);
 	dwc2_qh_list_free(hsotg, &hsotg->periodic_sched_queued);
+
+	/* The frame list of descriptor DMA, if one was made */
+	dwc2_hcd_frame_list_free(hsotg);
 
 	/* Free memory for the host channels */
 	for (i = 0; i < MAX_EPS_CHANNELS; i++) {

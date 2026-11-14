@@ -248,8 +248,10 @@ struct dwc2_hs_transfer_time {
  *                       - DWC2_HC_PID_DATA1
  * @ping_state:         Ping state
  * @do_split:           Full/low speed endpoint on high-speed hub requires split
- * @td_first:           Index of first activated isochronous transfer descriptor
- * @td_last:            Index of last activated isochronous transfer descriptor
+ * @td_first:           Index of the oldest isochronous transfer descriptor
+ *                      that is out, i.e. written and not completed yet
+ * @td_last:            Index of the next isochronous transfer descriptor to
+ *                      write
  * @host_us:            Bandwidth in microseconds per transfer as seen by host
  * @device_us:          Bandwidth in microseconds per transfer as seen by device
  * @host_interval:      Interval between transfers as seen by the host.  If
@@ -382,10 +384,9 @@ struct dwc2_qh {
  * @urb:                URB for this transfer
  * @qh:                 Queue head for this QTD
  * @qtd_list_entry:     For linking to the QH's list of QTDs
- * @isoc_td_first:	Index of first activated isochronous transfer
- *			descriptor in Descriptor DMA mode
- * @isoc_td_last:	Index of last activated isochronous transfer
- *			descriptor in Descriptor DMA mode
+ * @isoc_td_first:	Index of the descriptor of the QTD's frame 0 in
+ *			Descriptor DMA mode, whether or not that frame has
+ *			one; frame n has the descriptor n intervals on
  *
  * A Queue Transfer Descriptor (QTD) holds the state of a bulk, control,
  * interrupt, or isochronous transfer. A single QTD is created for each URB
@@ -407,7 +408,6 @@ struct dwc2_qtd {
 	u8 isoc_split_pos;
 	u16 isoc_frame_index;
 	u16 isoc_split_offset;
-	u16 isoc_td_last;
 	u16 isoc_td_first;
 	u32 ssplit_out_xfer_count;
 	u8 error_count;
@@ -561,10 +561,12 @@ void dwc2_hcd_start_xfer_ddma(struct dwc2_hsotg *hsotg,
 void dwc2_hcd_complete_xfer_ddma(struct dwc2_hsotg *hsotg,
 				 struct dwc2_host_chan *chan, int chnum,
 					enum dwc2_halt_status halt_status);
+void dwc2_hcd_isoc_poll_ddma(struct dwc2_hsotg *hsotg);
 
 int dwc2_hcd_qh_init_ddma(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh,
 			  gfp_t mem_flags);
 void dwc2_hcd_qh_free_ddma(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh);
+void dwc2_hcd_frame_list_free(struct dwc2_hsotg *hsotg);
 
 /* Check if QH is non-periodic */
 #define dwc2_qh_is_non_per(_qh_ptr_) \

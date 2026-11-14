@@ -111,7 +111,8 @@ static void dwc2_desc_list_free(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh)
 	qh->n_bytes = NULL;
 }
 
-static int dwc2_frame_list_alloc(struct dwc2_hsotg *hsotg, gfp_t mem_flags)
+/* The caller holds hsotg->lock */
+static int dwc2_frame_list_alloc(struct dwc2_hsotg *hsotg)
 {
 	if (hsotg->frame_list)
 		return 0;
@@ -124,43 +125,55 @@ static int dwc2_frame_list_alloc(struct dwc2_hsotg *hsotg, gfp_t mem_flags)
 	hsotg->frame_list_dma = dma_map_single(hsotg->dev, hsotg->frame_list,
 					       hsotg->frame_list_sz,
 					       DMA_TO_DEVICE);
+	if (dma_mapping_error(hsotg->dev, hsotg->frame_list_dma)) {
+		kfree(hsotg->frame_list);
+		hsotg->frame_list = NULL;
+		return -ENOMEM;
+	}
 
 	return 0;
 }
 
-static void dwc2_frame_list_free(struct dwc2_hsotg *hsotg)
+/**
+ * dwc2_hcd_frame_list_free() - Stops the periodic schedule and frees the frame
+ * list
+ *
+ * @hsotg: The HCD state structure for the DWC OTG controller
+ *
+ * For when the HCD goes away. The list is made for the first periodic QH and
+ * kept from then on, whether or not a channel is in it.
+ */
+void dwc2_hcd_frame_list_free(struct dwc2_hsotg *hsotg)
 {
 	unsigned long flags;
+	u32 hcfg;
 
 	spin_lock_irqsave(&hsotg->lock, flags);
 
-	if (!hsotg->frame_list) {
-		spin_unlock_irqrestore(&hsotg->lock, flags);
-		return;
+	if (hsotg->frame_list) {
+		hcfg = dwc2_readl(hsotg, HCFG);
+		hcfg &= ~HCFG_PERSCHEDENA;
+		dev_vdbg(hsotg->dev, "Disabling Periodic schedule\n");
+		dwc2_writel(hsotg, hcfg, HCFG);
+
+		dma_unmap_single(hsotg->dev, hsotg->frame_list_dma,
+				 hsotg->frame_list_sz, DMA_TO_DEVICE);
+		kfree(hsotg->frame_list);
+		hsotg->frame_list = NULL;
 	}
-
-	dma_unmap_single(hsotg->dev, hsotg->frame_list_dma,
-			 hsotg->frame_list_sz, DMA_FROM_DEVICE);
-
-	kfree(hsotg->frame_list);
-	hsotg->frame_list = NULL;
 
 	spin_unlock_irqrestore(&hsotg->lock, flags);
 }
 
+/* The caller holds hsotg->lock */
 static void dwc2_per_sched_enable(struct dwc2_hsotg *hsotg, u32 fr_list_en)
 {
 	u32 hcfg;
-	unsigned long flags;
-
-	spin_lock_irqsave(&hsotg->lock, flags);
 
 	hcfg = dwc2_readl(hsotg, HCFG);
-	if (hcfg & HCFG_PERSCHEDENA) {
+	if (hcfg & HCFG_PERSCHEDENA)
 		/* already enabled */
-		spin_unlock_irqrestore(&hsotg->lock, flags);
 		return;
-	}
 
 	dwc2_writel(hsotg, hsotg->frame_list_dma, HFLBADDR);
 
@@ -168,29 +181,6 @@ static void dwc2_per_sched_enable(struct dwc2_hsotg *hsotg, u32 fr_list_en)
 	hcfg |= fr_list_en | HCFG_PERSCHEDENA;
 	dev_vdbg(hsotg->dev, "Enabling Periodic schedule\n");
 	dwc2_writel(hsotg, hcfg, HCFG);
-
-	spin_unlock_irqrestore(&hsotg->lock, flags);
-}
-
-static void dwc2_per_sched_disable(struct dwc2_hsotg *hsotg)
-{
-	u32 hcfg;
-	unsigned long flags;
-
-	spin_lock_irqsave(&hsotg->lock, flags);
-
-	hcfg = dwc2_readl(hsotg, HCFG);
-	if (!(hcfg & HCFG_PERSCHEDENA)) {
-		/* already disabled */
-		spin_unlock_irqrestore(&hsotg->lock, flags);
-		return;
-	}
-
-	hcfg &= ~HCFG_PERSCHEDENA;
-	dev_vdbg(hsotg->dev, "Disabling Periodic schedule\n");
-	dwc2_writel(hsotg, hcfg, HCFG);
-
-	spin_unlock_irqrestore(&hsotg->lock, flags);
 }
 
 /*
@@ -246,6 +236,13 @@ static void dwc2_update_frame_list(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh,
 
 	if (!enable)
 		return;
+
+	/*
+	 * The schedule is switched on here, with a channel in the list, and
+	 * not where the list is made: whatever has reset HCFG since, it is on
+	 * for every periodic transfer that starts.
+	 */
+	dwc2_per_sched_enable(hsotg, HCFG_FRLISTEN_64);
 
 	chan->schinfo = 0;
 	if (chan->speed == USB_SPEED_HIGH && qh->host_interval) {
@@ -307,11 +304,13 @@ static void dwc2_release_channel_ddma(struct dwc2_hsotg *hsotg,
  * Return: 0 if successful, negative error code otherwise
  *
  * Allocates memory for the descriptor list. For the first periodic QH,
- * allocates memory for the FrameList and enables periodic scheduling.
+ * allocates memory for the FrameList; periodic scheduling is enabled when a
+ * channel is put in it, dwc2_update_frame_list().
  */
 int dwc2_hcd_qh_init_ddma(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh,
 			  gfp_t mem_flags)
 {
+	unsigned long flags;
 	int retval;
 
 	if (qh->do_split) {
@@ -327,13 +326,12 @@ int dwc2_hcd_qh_init_ddma(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh,
 
 	if (qh->ep_type == USB_ENDPOINT_XFER_ISOC ||
 	    qh->ep_type == USB_ENDPOINT_XFER_INT) {
-		if (!hsotg->frame_list) {
-			retval = dwc2_frame_list_alloc(hsotg, mem_flags);
-			if (retval)
-				goto err1;
-			/* Enable periodic schedule on first periodic QH */
-			dwc2_per_sched_enable(hsotg, HCFG_FRLISTEN_64);
-		}
+		/* The first periodic QH makes the frame list */
+		spin_lock_irqsave(&hsotg->lock, flags);
+		retval = dwc2_frame_list_alloc(hsotg);
+		spin_unlock_irqrestore(&hsotg->lock, flags);
+		if (retval)
+			goto err1;
 	}
 
 	qh->ntd = 0;
@@ -352,8 +350,10 @@ err0:
  * @hsotg: The HCD state structure for the DWC OTG controller
  * @qh:    The QH to free
  *
- * Frees descriptor list memory associated with the QH. If QH is periodic and
- * the last, frees FrameList memory and disables periodic scheduling.
+ * Frees descriptor list memory associated with the QH. The frame list and the
+ * periodic schedule stay: the interrupt endpoints of a hub and of other
+ * devices are in them and have to go on when an isochronous endpoint is
+ * closed. They go with the HCD, dwc2_hcd_frame_list_free().
  */
 void dwc2_hcd_qh_free_ddma(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh)
 {
@@ -372,14 +372,6 @@ void dwc2_hcd_qh_free_ddma(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh)
 	if (qh->channel)
 		dwc2_release_channel_ddma(hsotg, qh);
 	spin_unlock_irqrestore(&hsotg->lock, flags);
-
-	if ((qh->ep_type == USB_ENDPOINT_XFER_ISOC ||
-	     qh->ep_type == USB_ENDPOINT_XFER_INT) &&
-	    (hsotg->params.uframe_sched ||
-	     !hsotg->periodic_channels) && hsotg->frame_list) {
-		dwc2_per_sched_disable(hsotg);
-		dwc2_frame_list_free(hsotg);
-	}
 }
 
 static u8 dwc2_frame_to_desc_idx(struct dwc2_qh *qh, u16 frame_idx)
@@ -454,31 +446,19 @@ static u16 dwc2_calc_starting_frame(struct dwc2_hsotg *hsotg,
 }
 
 /*
- * Calculate initial descriptor index for isochronous transfer based on
- * scheduled frame
+ * The first place in the descriptor list that the controller still takes a
+ * new isochronous descriptor from: on the QH's schedule, in the frame
+ * dwc2_calc_starting_frame() gives. A list that starts begins there, and so
+ * does one whose next free place the controller has reached.
  */
-static u16 dwc2_recalc_initial_desc_idx(struct dwc2_hsotg *hsotg,
-					struct dwc2_qh *qh)
+static u16 dwc2_isoc_first_desc_idx(struct dwc2_hsotg *hsotg,
+				    struct dwc2_qh *qh)
 {
 	u16 frame, fr_idx, fr_idx_tmp, skip_frames;
 
 	/*
-	 * With current ISOC processing algorithm the channel is being released
-	 * when no more QTDs in the list (qh->ntd == 0). Thus this function is
-	 * called only when qh->ntd == 0 and qh->channel == 0.
-	 *
-	 * So qh->channel != NULL branch is not used and just not removed from
-	 * the source file. It is required for another possible approach which
-	 * is, do not disable and release the channel when ISOC session
-	 * completed, just move QH to inactive schedule until new QTD arrives.
-	 * On new QTD, the QH moved back to 'ready' schedule, starting frame and
-	 * therefore starting desc_index are recalculated. In this case channel
-	 * is released only on ep_disable.
-	 */
-
-	/*
-	 * Calculate starting descriptor index. For INTERRUPT endpoint it is
-	 * always 0.
+	 * dwc2_hcd_start_xfer_ddma() comes here with the channel assigned.
+	 * The branch without one stays as it was.
 	 */
 	if (qh->channel) {
 		frame = dwc2_calc_starting_frame(hsotg, qh, &skip_frames);
@@ -497,9 +477,7 @@ static u16 dwc2_recalc_initial_desc_idx(struct dwc2_hsotg *hsotg,
 		fr_idx = dwc2_frame_list_idx(qh->next_active_frame);
 	}
 
-	qh->td_first = qh->td_last = dwc2_frame_to_desc_idx(qh, fr_idx);
-
-	return skip_frames;
+	return dwc2_frame_to_desc_idx(qh, fr_idx);
 }
 
 #define ISOC_URB_GIVEBACK_ASAP
@@ -507,6 +485,25 @@ static u16 dwc2_recalc_initial_desc_idx(struct dwc2_hsotg *hsotg,
 #define MAX_ISOC_XFER_SIZE_FS	1023
 #define MAX_ISOC_XFER_SIZE_HS	3072
 #define DESCNUM_THRESHOLD	4
+
+/*
+ * The place in the descriptor list of the (micro)frame that is running. The
+ * controller takes the descriptor the frame number points at: the list is as
+ * long as the number's period in it, see dwc2_frame_to_desc_idx().
+ */
+static u16 dwc2_isoc_cur_desc_idx(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh)
+{
+	return hsotg->frame_number & (dwc2_max_desc_num(qh) - 1);
+}
+
+/*
+ * Two frames in places of the descriptor list: no further than that does
+ * dwc2_calc_starting_frame() put the start of a list ahead of the controller
+ */
+static u16 dwc2_isoc_two_frames(struct dwc2_qh *qh)
+{
+	return qh->dev_speed == USB_SPEED_HIGH ? 16 : 2;
+}
 
 static void dwc2_fill_host_isoc_dma_desc(struct dwc2_hsotg *hsotg,
 					 struct dwc2_qtd *qtd,
@@ -548,43 +545,98 @@ static void dwc2_fill_host_isoc_dma_desc(struct dwc2_hsotg *hsotg,
 }
 
 static void dwc2_init_isoc_dma_desc(struct dwc2_hsotg *hsotg,
-				    struct dwc2_qh *qh, u16 skip_frames)
+				    struct dwc2_qh *qh)
 {
 	struct dwc2_qtd *qtd;
 	u32 max_xfer_size;
-	u16 idx, inc, n_desc = 0, ntd_max = 0;
-	u16 cur_idx;
-	u16 next_idx;
+	u16 list_len = dwc2_max_desc_num(qh);
+	u16 inc = qh->host_interval;
+	u16 idx, first, cur, out, room, step, n_desc = 0;
+	bool waiting = false;
 
-	idx = qh->td_last;
-	inc = qh->host_interval;
-	hsotg->frame_number = dwc2_hcd_get_frame_number(hsotg);
-	cur_idx = idx;
-	next_idx = dwc2_desclist_idx_inc(qh->td_last, inc, qh->dev_speed);
-
-	/*
-	 * Ensure current frame number didn't overstep last scheduled
-	 * descriptor. If it happens, the only way to recover is to move
-	 * qh->td_last to current frame number + 1.
-	 * So that next isoc descriptor will be scheduled on frame number + 1
-	 * and not on a past frame.
-	 */
-	if (dwc2_frame_idx_num_gt(cur_idx, next_idx) || (cur_idx == next_idx)) {
-		if (inc < 32) {
-			dev_vdbg(hsotg->dev,
-				 "current frame number overstep last descriptor\n");
-			qh->td_last = dwc2_desclist_idx_inc(cur_idx, inc,
-							    qh->dev_speed);
-			idx = qh->td_last;
+	/* The first QTD that has frames without a descriptor */
+	list_for_each_entry(qtd, &qh->qtd_list, qtd_list_entry) {
+		if (!qtd->in_process ||
+		    qtd->isoc_frame_index_last < qtd->urb->packet_count) {
+			waiting = true;
+			break;
 		}
 	}
+	if (!waiting || !inc)
+		return;
 
-	if (qh->host_interval) {
-		ntd_max = (dwc2_max_desc_num(qh) + qh->host_interval - 1) /
-				qh->host_interval;
-		if (skip_frames && !qh->channel)
-			ntd_max -= skip_frames / qh->host_interval;
+	/*
+	 * The first place the controller still takes a new descriptor from,
+	 * and the place it is at: both from one reading of the frame number.
+	 */
+	first = dwc2_isoc_first_desc_idx(hsotg, qh);
+	cur = dwc2_isoc_cur_desc_idx(hsotg, qh);
+
+	if (!qh->ntd) {
+		/* No descriptor is out: the list starts, or starts anew */
+		if (qh->channel->xfer_started)
+			dev_dbg(hsotg->dev,
+				"isoc: no descriptor is out on channel %d, the list starts anew\n",
+				qh->channel->hc_num);
+		qh->td_first = first;
+		qh->td_last = first;
+		out = 0;
+	} else {
+		u16 back, need, new_out;
+		int ahead;
+
+		/*
+		 * Places from the oldest descriptor that is out, qh->td_first,
+		 * to the next one to write, qh->td_last: the descriptors that
+		 * are out and the places left free between them. With both
+		 * indexes the same, that is the whole list.
+		 */
+		out = (qh->td_last - qh->td_first) & (list_len - 1);
+		if (!out)
+			out = list_len;
+
+		/*
+		 * How far qh->td_last is ahead of the controller. The
+		 * controller is either a little before the oldest descriptor
+		 * that is out, when it has yet to cross free places, the
+		 * start of the list or the rest of an interval, or it is at
+		 * that descriptor or past it by any number of places. What
+		 * can be "before" is taken to be before.
+		 */
+		back = min_t(u16, dwc2_isoc_two_frames(qh) + inc, list_len / 2);
+		ahead = (cur - qh->td_first) & (list_len - 1);
+		if (ahead >= list_len - back)
+			ahead -= list_len;
+		ahead = out - ahead;
+
+		/*
+		 * A descriptor written before the first place the controller
+		 * still takes one from is passed over and taken a turn of the
+		 * list later. Go on from that place then and leave the ones
+		 * before it free. Not in the middle of a QTD whose
+		 * descriptors are still out: those stay in one piece.
+		 */
+		need = (first - cur) & (list_len - 1);
+		new_out = (first - qh->td_first) & (list_len - 1);
+		if (ahead < need && new_out > out &&
+		    qtd->isoc_frame_index == qtd->isoc_frame_index_last) {
+			dev_dbg(hsotg->dev,
+				"isoc: %u places left free before %u, the controller is at %u\n",
+				new_out - out, first, cur);
+			qh->td_last = first;
+			out = new_out;
+		}
 	}
+	idx = qh->td_last;
+
+	/*
+	 * Room: up to the oldest descriptor that is out, and not round to
+	 * where the controller is, which would take a descriptor written
+	 * there before the ones that were written first.
+	 */
+	room = min_t(u16, list_len - out, (cur - idx) & (list_len - 1));
+	/* An interval longer than the list still gets one descriptor */
+	step = min(inc, list_len);
 
 	max_xfer_size = qh->dev_speed == USB_SPEED_HIGH ?
 			MAX_ISOC_XFER_SIZE_HS : MAX_ISOC_XFER_SIZE_FS;
@@ -595,23 +647,35 @@ static void dwc2_init_isoc_dma_desc(struct dwc2_hsotg *hsotg,
 		    qtd->urb->packet_count)
 			continue;
 
-		qtd->isoc_td_first = idx;
-		while (qh->ntd < ntd_max && qtd->isoc_frame_index_last <
-						qtd->urb->packet_count) {
+		/*
+		 * Where frame 0 of the QTD is or would be: frame n has the
+		 * descriptor n intervals on, also when the QTD is taken up
+		 * again behind a gap.
+		 */
+		qtd->isoc_td_first =
+			dwc2_desclist_idx_dec(idx,
+					      qtd->isoc_frame_index_last * inc,
+					      qh->dev_speed);
+		while (room >= step &&
+		       qtd->isoc_frame_index_last < qtd->urb->packet_count) {
 			dwc2_fill_host_isoc_dma_desc(hsotg, qtd, qh,
 						     max_xfer_size, idx);
 			idx = dwc2_desclist_idx_inc(idx, inc, qh->dev_speed);
+			room -= step;
 			n_desc++;
 		}
-		qtd->isoc_td_last = idx;
 		qtd->in_process = 1;
 	}
 
 	qh->td_last = idx;
 
 #ifdef ISOC_URB_GIVEBACK_ASAP
-	/* Set IOC for last descriptor if descriptor list is full */
-	if (qh->ntd == ntd_max) {
+	/*
+	 * Set IOC for last descriptor if descriptor list is full. Only for
+	 * one written just now: an older one has the bit already, and the
+	 * controller may be writing its status this moment.
+	 */
+	if (n_desc && room < step) {
 		idx = dwc2_desclist_idx_dec(qh->td_last, inc, qh->dev_speed);
 		qh->desc_list[idx].status |= HOST_DMA_IOC;
 		dma_sync_single_for_device(hsotg->dev,
@@ -818,7 +882,6 @@ void dwc2_hcd_start_xfer_ddma(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh)
 {
 	/* Channel is already assigned */
 	struct dwc2_host_chan *chan = qh->channel;
-	u16 skip_frames = 0;
 
 	switch (chan->ep_type) {
 	case USB_ENDPOINT_XFER_CONTROL:
@@ -832,9 +895,14 @@ void dwc2_hcd_start_xfer_ddma(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh)
 		dwc2_hc_start_transfer_ddma(hsotg, chan);
 		break;
 	case USB_ENDPOINT_XFER_ISOC:
-		if (!qh->ntd)
-			skip_frames = dwc2_recalc_initial_desc_idx(hsotg, qh);
-		dwc2_init_isoc_dma_desc(hsotg, qh, skip_frames);
+		/*
+		 * No descriptors for a channel that is being halted: what is
+		 * in its list is given back when it has halted.
+		 */
+		if (chan->halt_status != DWC2_HC_XFER_NO_HALT_STATUS)
+			break;
+
+		dwc2_init_isoc_dma_desc(hsotg, qh);
 
 		if (!chan->xfer_started) {
 			dwc2_update_frame_list(hsotg, qh, 1);
@@ -857,7 +925,26 @@ void dwc2_hcd_start_xfer_ddma(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh)
 }
 
 #define DWC2_CMPL_DONE		1
-#define DWC2_CMPL_STOP		2
+
+/* Has the controller still to do this descriptor? */
+static bool dwc2_isoc_desc_active(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh,
+				  u16 idx)
+{
+	dma_sync_single_for_cpu(hsotg->dev, qh->desc_list_dma + (idx *
+				sizeof(struct dwc2_dma_desc)),
+				sizeof(struct dwc2_dma_desc),
+				DMA_FROM_DEVICE);
+
+	return qh->desc_list[idx].status & HOST_DMA_A;
+}
+
+/* The descriptor of the next frame of a QTD that is to be completed */
+static u16 dwc2_isoc_qtd_desc_idx(struct dwc2_qh *qh, struct dwc2_qtd *qtd,
+				  u16 frame)
+{
+	return dwc2_desclist_idx_inc(qtd->isoc_td_first,
+				     frame * qh->host_interval, qh->dev_speed);
+}
 
 static int dwc2_cmpl_host_isoc_dma_desc(struct dwc2_hsotg *hsotg,
 					struct dwc2_host_chan *chan,
@@ -866,7 +953,6 @@ static int dwc2_cmpl_host_isoc_dma_desc(struct dwc2_hsotg *hsotg,
 {
 	struct dwc2_dma_desc *dma_desc;
 	struct dwc2_hcd_iso_packet_desc *frame_desc;
-	u16 frame_desc_idx;
 	struct urb *usb_urb;
 	u16 remain = 0;
 	int rc = 0;
@@ -876,18 +962,19 @@ static int dwc2_cmpl_host_isoc_dma_desc(struct dwc2_hsotg *hsotg,
 
 	usb_urb = qtd->urb->priv;
 
-	dma_sync_single_for_cpu(hsotg->dev, qh->desc_list_dma + (idx *
-				sizeof(struct dwc2_dma_desc)),
-				sizeof(struct dwc2_dma_desc),
-				DMA_FROM_DEVICE);
-
+	/*
+	 * The caller has synced the descriptor and seen that it is done,
+	 * dwc2_isoc_desc_active(); the controller does not touch it again.
+	 */
 	dma_desc = &qh->desc_list[idx];
-	frame_desc_idx = (idx - qtd->isoc_td_first) & (usb_urb->number_of_packets - 1);
-
-	frame_desc = &qtd->urb->iso_descs[frame_desc_idx];
-	if (idx == qtd->isoc_td_first)
+	frame_desc = &qtd->urb->iso_descs[qtd->isoc_frame_index];
+	if (!qtd->isoc_frame_index)
 		usb_urb->start_frame = dwc2_hcd_get_frame_number(hsotg);
-	dma_desc->buf = (u32)(qtd->urb->dma + frame_desc->offset);
+	/*
+	 * Nothing is written to the descriptor here. Its cache line holds
+	 * other descriptors, which the controller may be working on: a line
+	 * made dirty goes back to memory as it was read, with them in it.
+	 */
 	if (chan->ep_is_in)
 		remain = (dma_desc->status & HOST_DMA_ISOC_NBYTES_MASK) >>
 			 HOST_DMA_ISOC_NBYTES_SHIFT;
@@ -927,10 +1014,6 @@ static int dwc2_cmpl_host_isoc_dma_desc(struct dwc2_hsotg *hsotg,
 	}
 
 	qh->ntd--;
-
-	/* Stop if IOC requested descriptor reached */
-	if (dma_desc->status & HOST_DMA_IOC)
-		rc = DWC2_CMPL_STOP;
 
 	return rc;
 }
@@ -986,25 +1069,36 @@ static void dwc2_complete_isoc_xfer_ddma(struct dwc2_hsotg *hsotg,
 		return;
 	}
 
-	list_for_each_entry_safe(qtd, qtd_tmp, &qh->qtd_list, qtd_list_entry) {
+	/*
+	 * Complete what the controller has done, in the order of the list, and
+	 * nothing else: a descriptor counts when the controller has cleared
+	 * its Active bit. How many that are is not tied to the interrupt
+	 * that brought us here. One interrupt may stand for two descriptors
+	 * that asked for it, and descriptors that were written too late are
+	 * done a turn of the list after their interrupt. A scan that takes
+	 * one URB per interrupt falls behind the controller for good then,
+	 * and with every URB counted as in flight nothing interrupts any more.
+	 *
+	 * A completed QTD leaves the list, so the next one is always the first
+	 * in it. It is looked up again each time: giving a URB back drops the
+	 * lock, and a URB that has no descriptors yet may be dequeued then.
+	 */
+	while (!list_empty(&qh->qtd_list)) {
+		qtd = list_first_entry(&qh->qtd_list, struct dwc2_qtd,
+				       qtd_list_entry);
 		if (!qtd->in_process)
 			break;
 
 		/*
-		 * Ensure idx corresponds to descriptor where first urb of this
-		 * qtd was added. In fact, during isoc desc init, dwc2 may skip
-		 * an index if current frame number is already over this index.
+		 * A QTD need not start where the one before it ended:
+		 * dwc2_init_isoc_dma_desc() may leave a gap.
 		 */
-		if (idx != qtd->isoc_td_first) {
-			dev_vdbg(hsotg->dev,
-				 "try to complete %d instead of %d\n",
-				 idx, qtd->isoc_td_first);
-			idx = qtd->isoc_td_first;
-		}
+		idx = dwc2_isoc_qtd_desc_idx(qh, qtd, qtd->isoc_frame_index);
+		rc = 0;
 
-		do {
-			struct dwc2_qtd *qtd_next;
-			u16 cur_idx;
+		while (qtd->isoc_frame_index < qtd->isoc_frame_index_last) {
+			if (dwc2_isoc_desc_active(hsotg, qh, idx))
+				goto stop_scan;
 
 			rc = dwc2_cmpl_host_isoc_dma_desc(hsotg, chan, qtd, qh,
 							  idx);
@@ -1012,29 +1106,14 @@ static void dwc2_complete_isoc_xfer_ddma(struct dwc2_hsotg *hsotg,
 				return;
 			idx = dwc2_desclist_idx_inc(idx, qh->host_interval,
 						    chan->speed);
-			if (rc == 0)
-				continue;
-
-			if (rc == DWC2_CMPL_DONE || rc == DWC2_CMPL_STOP)
-				goto stop_scan;
-
-			/* rc == DWC2_CMPL_STOP */
-
-			if (qh->host_interval >= 32)
-				goto stop_scan;
-
-			qh->td_first = idx;
-			cur_idx = dwc2_frame_list_idx(hsotg->frame_number);
-			qtd_next = list_first_entry(&qh->qtd_list,
-						    struct dwc2_qtd,
-						    qtd_list_entry);
-			if (dwc2_frame_idx_num_gt(cur_idx,
-						  qtd_next->isoc_td_last))
+			/* The QTD is gone with its last frame */
+			if (rc == DWC2_CMPL_DONE)
 				break;
+		}
 
-			goto stop_scan;
-
-		} while (idx != qh->td_first);
+		/* Frames of this QTD have no descriptor yet */
+		if (rc != DWC2_CMPL_DONE)
+			break;
 	}
 
 stop_scan:
@@ -1350,5 +1429,72 @@ void dwc2_hcd_complete_xfer_ddma(struct dwc2_hsotg *hsotg,
 				tr_type = DWC2_TRANSACTION_ALL;
 		}
 		dwc2_hcd_queue_transactions(hsotg, tr_type);
+	}
+}
+
+/**
+ * dwc2_hcd_isoc_poll_ddma() - Completes isochronous URBs the controller is
+ * through with, whether or not it has interrupted for them
+ *
+ * @hsotg: The HCD state structure for the DWC OTG controller
+ *
+ * Called from the start-of-frame interrupt in every eighth (micro)frame, which
+ * is once a frame at high speed. The controller interrupts when it has done
+ * the last descriptor of a URB. If descriptors of
+ * that URB are done later than that one, because they were written too late
+ * and wait for the next turn of the list, nothing interrupts when they are
+ * done at last, and nothing else may come: URBs are given back in order, so
+ * the ones behind it stay out, and without them the class driver has nothing
+ * to submit.
+ */
+void dwc2_hcd_isoc_poll_ddma(struct dwc2_hsotg *hsotg)
+{
+	struct dwc2_qh *qh;
+
+	list_for_each_entry(qh, &hsotg->periodic_sched_queued, qh_list_entry) {
+		struct dwc2_host_chan *chan = qh->channel;
+		struct dwc2_qtd *qtd;
+		u16 first, last;
+
+		if (qh->ep_type != USB_ENDPOINT_XFER_ISOC || !chan ||
+		    !chan->xfer_started || !qh->ntd ||
+		    list_empty(&qh->qtd_list))
+			continue;
+
+		/*
+		 * Not a channel that is being halted: a dequeued URB has taken
+		 * its QTD out of the list, and what is left of the list is
+		 * given back when the channel has halted. Until then
+		 * dwc2_hc_halt() keeps every other interrupt of the channel
+		 * away from it, and so does this.
+		 */
+		if (chan->halt_status != DWC2_HC_XFER_NO_HALT_STATUS)
+			continue;
+
+		qtd = list_first_entry(&qh->qtd_list, struct dwc2_qtd,
+				       qtd_list_entry);
+		if (!qtd->in_process ||
+		    qtd->isoc_frame_index >= qtd->isoc_frame_index_last)
+			continue;
+
+		/*
+		 * The URB's last descriptor is looked at first: in nearly
+		 * every call it is still active, and that one read settles it.
+		 */
+		first = dwc2_isoc_qtd_desc_idx(qh, qtd, qtd->isoc_frame_index);
+		last = dwc2_isoc_qtd_desc_idx(qh, qtd,
+					      qtd->isoc_frame_index_last - 1);
+		if (dwc2_isoc_desc_active(hsotg, qh, last) ||
+		    dwc2_isoc_desc_active(hsotg, qh, first))
+			continue;
+
+		dev_dbg(hsotg->dev,
+			"isoc: channel %d has a URB done and no interrupt for it\n",
+			chan->hc_num);
+
+		/* This moves QHs between the schedules: one QH a call */
+		dwc2_hcd_complete_xfer_ddma(hsotg, chan, chan->hc_num,
+					    DWC2_HC_XFER_COMPLETE);
+		break;
 	}
 }
