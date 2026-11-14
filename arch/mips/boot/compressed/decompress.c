@@ -76,6 +76,29 @@ void __stack_chk_fail(void)
 	error("stack-protector: Kernel stack is corrupted\n");
 }
 
+/*
+ * The kernel was written through the data cache and is about to be executed.
+ * Ingenic's own decompressor writes the primary data cache back and empties
+ * the instruction cache before it jumps there; both are 32 KiB with lines of
+ * 32 bytes on the XBurst2.
+ */
+static void xburst2_flush_caches(void)
+{
+#ifdef CONFIG_MACH_XBURST2
+	unsigned long addr;
+
+	for (addr = CKSEG0; addr < CKSEG0 + 0x8000; addr += 32)
+		__asm__ __volatile__(
+		"	.set	push			\n"
+		"	.set	mips32r2		\n"
+		"	cache	0x01, 0(%0)	# Index_Writeback_Inv_D	\n"
+		"	cache	0x00, 0(%0)	# Index_Invalidate_I	\n"
+		"	.set	pop			\n"
+		: : "r" (addr));
+	__asm__ __volatile__("sync");
+#endif
+}
+
 void decompress_kernel(unsigned long boot_heap_start)
 {
 	unsigned long zimage_start, zimage_size;
@@ -125,5 +148,7 @@ void decompress_kernel(unsigned long boot_heap_start)
 	}
 
 	/* FIXME: should we flush cache here? */
+	if (IS_ENABLED(CONFIG_MACH_XBURST2))
+		xburst2_flush_caches();
 	puts("Now, booting the kernel...\n");
 }

@@ -74,7 +74,13 @@ void local_flush_tlb_all(void)
 	 * Blast 'em all away.
 	 * If there are any wired entries, fall back to iterating
 	 */
-	if (cpu_has_tlbinv && !entry) {
+	if (IS_ENABLED(CONFIG_MACH_XBURST2) && cpu_has_tlbinv && !entry) {
+		/*
+		 * Ingenic's kernel empties the TLB of the XBurst2 with one
+		 * TLBINVF, without walking the sets.
+		 */
+		tlbinvf();
+	} else if (cpu_has_tlbinv && !entry) {
 		if (current_cpu_data.tlbsizevtlb) {
 			write_c0_index(0);
 			mtc0_tlbw_hazard();

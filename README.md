@@ -2,7 +2,7 @@
 
 The kernel of [Datel OS](https://github.com/zales/datel-os) for the Creality K1 3D printer, whose mainboard carries an Ingenic X2000: two XBurst2 MIPS32 cores and 256 MB of RAM. It is kernel.org's stable Linux 6.18 plus the support the board needs, added through pull requests.
 
-**State:** `main` is plain Linux 6.18.63. It has no X2000 support yet and does not run on the printer. Datel OS ships Ingenic's SDK kernel 6.6 until phase A below is complete.
+**State:** phase A is under way. The tree builds a kernel for the K1 (`k1_defconfig`) that cannot run yet: the platform code is there, the drivers are not. Datel OS ships Ingenic's SDK kernel 6.6 until phase A below is complete.
 
 The kernel's own introduction is in [README](README).
 
@@ -16,13 +16,15 @@ Mainline has drivers for some of the X2000 (pin control, USB, SPI, Ethernet) but
 
 | Part | Phase A: carried over | Phase B: rewritten |
 |---|---|---|
-| Platform (`arch/mips/xburst2`), boot image | not yet | not yet |
+| Platform (`arch/mips/xburst2`), boot image | carried over, not run yet | not yet |
 | Clocks, timer, interrupt controller | not yet | not yet |
 | Pin control, serial | not yet | not yet |
 | MMC, DMA, I2C | not yet | not yet |
 | USB | not yet | not yet |
 | TCU, watchdog | not yet | not yet |
 | The K1 board: device tree, `k1_defconfig`, Helix codec driver, pstore | not yet | not yet |
+
+The carried code keeps the SDK's paths, so a file can be compared with its origin: the platform in `arch/mips/xburst2`, the drivers in `module_drivers/`. What the SDK changes in the kernel's own files is tied to `CONFIG_MACH_XBURST2`.
 
 ## Branches
 
@@ -58,11 +60,11 @@ Each one says:
 Any GCC for little-endian MIPS will do for a build check; on Debian and Ubuntu it is the package `gcc-mipsel-linux-gnu`.
 
 ```bash
-make ARCH=mips CROSS_COMPILE=mipsel-linux-gnu- O=build cu1830-neo_defconfig
+make ARCH=mips CROSS_COMPILE=mipsel-linux-gnu- O=build k1_defconfig
 make ARCH=mips CROSS_COMPILE=mipsel-linux-gnu- O=build -j"$(nproc)"
 ```
 
-`cu1830-neo_defconfig` is upstream's closest relative of the K1 (Ingenic X1830, little endian) and stands in until `k1_defconfig` arrives with the platform.
+The image for the printer is `build/arch/mips/boot/uzImage.bin`: the self-extracting kernel in a U-Boot header, loaded at `0x80f00000`. The stock boot loader takes nothing else; it cannot unpack a kernel itself. `mkimage` comes from the package `u-boot-tools`.
 
 [.github/workflows/build.yml](.github/workflows/build.yml) runs this build for every pull request and for every push to `main`. It checks that the tree compiles; it does not run the kernel. The repository is private and its Actions minutes are limited, so the workflow is one job with a compiler cache, and changes to documentation alone do not start it.
 

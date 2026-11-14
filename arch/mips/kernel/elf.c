@@ -339,6 +339,16 @@ void mips_set_personality_nan(struct arch_elf_state *state)
 int mips_elf_read_implies_exec(void *elf_ex, int exstack)
 {
 	/*
+	 * The SDK kernel for the XBurst2 keeps the rule from before 5.8: a
+	 * program gets READ_IMPLIES_EXEC unless it asks for a stack that is
+	 * not executable, although the CPU has RI/XI. Userland built without
+	 * PT_GNU_STACK headers, as the Creality K1's is, has only ever run
+	 * that way on this SoC.
+	 */
+	if (IS_ENABLED(CONFIG_MACH_XBURST2))
+		return exstack != EXSTACK_DISABLE_X || !cpu_has_rixi;
+
+	/*
 	 * Set READ_IMPLIES_EXEC only on non-NX systems that
 	 * do not request a specific state via PT_GNU_STACK.
 	 */
