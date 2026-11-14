@@ -30,3 +30,7 @@ endmenu
 menu "[I2C] Master Drivers"
 source "module_drivers/drivers/i2c/busses/Kconfig"
 endmenu
+
+menu "[USB] Drivers"
+source "module_drivers/drivers/usb/phy/Kconfig"
+endmenu

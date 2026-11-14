@@ -7,3 +7,4 @@ obj-y += mmc/
 obj-y += pinctrl/
 obj-y += tty/
 obj-y += irqchip/
+obj-y += usb/
