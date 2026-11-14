@@ -10,3 +10,11 @@ endmenu
 menu "[CPM] clk Drivers"
 source "module_drivers/drivers/clk/ingenic-v2/Kconfig"
 endmenu
+
+menu "[GPIO] Pinctroller Drivers"
+source "module_drivers/drivers/pinctrl/Kconfig"
+endmenu
+
+menu "[UART] Drivers"
+source "module_drivers/drivers/tty/serial/Kconfig"
+endmenu
