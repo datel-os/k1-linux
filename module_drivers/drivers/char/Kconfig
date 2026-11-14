@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: GPL-2.0
+config INGENIC_HW_RANDOM
+	tristate "[RANDOM] Ingenic Random Driver"
+	depends on MIPS
+	depends on HW_RANDOM
+	help
+	  This driver provides kernel-side support for the Random Number
+	  Generator hardware found on Ingenic processors.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called ingenic-rng.
+
+	  If unsure, say N.

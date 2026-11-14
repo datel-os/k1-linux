@@ -34,3 +34,19 @@ endmenu
 menu "[USB] Drivers"
 source "module_drivers/drivers/usb/phy/Kconfig"
 endmenu
+
+menu "[MFD] Drivers"
+source "module_drivers/drivers/mfd/Kconfig"
+endmenu
+
+menu "[WDT] Drivers"
+source "module_drivers/drivers/watchdog/Kconfig"
+endmenu
+
+menu "[RTC] Drivers"
+source "module_drivers/drivers/rtc/Kconfig"
+endmenu
+
+menu "[CHAR] Drivers"
+source "module_drivers/drivers/char/Kconfig"
+endmenu

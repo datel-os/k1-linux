@@ -21,7 +21,7 @@ Mainline has drivers for some of the X2000 (pin control, USB, SPI, Ethernet) but
 | Pin control, serial | carried over, not run yet | not yet |
 | MMC, DMA, I2C | carried over, not run yet | not yet |
 | USB | transceiver carried over, upstream's `dwc2`; not run yet | not yet |
-| TCU, watchdog | not yet | not yet |
+| TCU, watchdog, RTC, random number generator | carried over, not run yet | not yet |
 | The K1 board: device tree, `k1_defconfig`, Helix codec driver, pstore | not yet | not yet |
 
 The carried code keeps the SDK's paths, so a file can be compared with its origin: the platform in `arch/mips/xburst2`, the drivers in `module_drivers/`. What the SDK changes in the kernel's own files is tied to `CONFIG_MACH_XBURST2`.

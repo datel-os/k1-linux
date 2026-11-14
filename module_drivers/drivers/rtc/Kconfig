@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: GPL-2.0
+config RTC_DRV_INGENIC
+	tristate "INGENIC RTC"
+	help
+	  If you say Y here you will get access to the real time clock
+	  built into your INGENIC CPU.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called rtc-ingenic.
