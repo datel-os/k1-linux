@@ -331,11 +331,13 @@ static void dwc2_driver_remove(struct platform_device *dev)
 
 	/* Exit clock gating when driver is removed. */
 	if (hsotg->params.power_down == DWC2_POWER_DOWN_PARAM_NONE &&
-	    hsotg->bus_suspended && !hsotg->params.no_clock_gating) {
-		if (dwc2_is_device_mode(hsotg))
-			dwc2_gadget_exit_clock_gating(hsotg, 0);
-		else
+	    hsotg->bus_suspended) {
+		if (dwc2_is_device_mode(hsotg)) {
+			if (!hsotg->params.no_clock_gating)
+				dwc2_gadget_exit_clock_gating(hsotg, 0);
+		} else if (dwc2_host_suspends_port(hsotg)) {
 			dwc2_host_exit_clock_gating(hsotg, 0);
+		}
 	}
 
 	dwc2_debugfs_exit(hsotg);

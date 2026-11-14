@@ -3323,7 +3323,7 @@ int dwc2_port_suspend(struct dwc2_hsotg *hsotg, u16 windex)
 		 * If not hibernation nor partial power down are supported,
 		 * clock gating is used to save power.
 		 */
-		if (!hsotg->params.no_clock_gating)
+		if (dwc2_host_suspends_port(hsotg))
 			dwc2_host_enter_clock_gating(hsotg);
 		break;
 	}
@@ -4391,6 +4391,16 @@ static int _dwc2_hcd_suspend(struct usb_hcd *hcd)
 
 			/* After entering suspend, hardware is not accessible */
 			clear_bit(HCD_FLAG_HW_ACCESSIBLE, &hcd->flags);
+		} else if (hsotg->params.ungated_port_suspend) {
+			/*
+			 * A port with a device is suspended by the hub's
+			 * request, before the bus (dwc2_port_suspend()). What
+			 * comes here has no device to suspend, and nothing
+			 * else is switched off: _dwc2_hcd_resume() would not
+			 * switch the PHY and VBUS on again when it finds a
+			 * device connected.
+			 */
+			goto skip_power_saving;
 		}
 		break;
 	default:
@@ -4666,11 +4676,13 @@ static int _dwc2_hcd_urb_enqueue(struct usb_hcd *hcd, struct urb *urb,
 	}
 
 	if (hsotg->params.power_down == DWC2_POWER_DOWN_PARAM_NONE &&
-	    hsotg->bus_suspended && !hsotg->params.no_clock_gating) {
-		if (dwc2_is_device_mode(hsotg))
-			dwc2_gadget_exit_clock_gating(hsotg, 0);
-		else
+	    hsotg->bus_suspended) {
+		if (dwc2_is_device_mode(hsotg)) {
+			if (!hsotg->params.no_clock_gating)
+				dwc2_gadget_exit_clock_gating(hsotg, 0);
+		} else if (dwc2_host_suspends_port(hsotg)) {
 			dwc2_host_exit_clock_gating(hsotg, 0);
+		}
 	}
 
 	if (!ep)
@@ -5929,7 +5941,8 @@ int dwc2_host_exit_partial_power_down(struct dwc2_hsotg *hsotg,
  *
  * @hsotg: Programming view of the DWC_otg controller
  *
- * This function is for entering Host mode clock gating.
+ * This function is for entering Host mode clock gating. With
+ * ungated_port_suspend it suspends the port and leaves the clocks running.
  */
 void dwc2_host_enter_clock_gating(struct dwc2_hsotg *hsotg)
 {
@@ -5943,17 +5956,19 @@ void dwc2_host_enter_clock_gating(struct dwc2_hsotg *hsotg)
 	hprt0 |= HPRT0_SUSP;
 	dwc2_writel(hsotg, hprt0, HPRT0);
 
-	/* Set the Phy Clock bit as suspend is received. */
-	pcgctl = dwc2_readl(hsotg, PCGCTL);
-	pcgctl |= PCGCTL_STOPPCLK;
-	dwc2_writel(hsotg, pcgctl, PCGCTL);
-	udelay(5);
+	if (!hsotg->params.ungated_port_suspend) {
+		/* Set the Phy Clock bit as suspend is received. */
+		pcgctl = dwc2_readl(hsotg, PCGCTL);
+		pcgctl |= PCGCTL_STOPPCLK;
+		dwc2_writel(hsotg, pcgctl, PCGCTL);
+		udelay(5);
 
-	/* Set the Gate hclk as suspend is received. */
-	pcgctl = dwc2_readl(hsotg, PCGCTL);
-	pcgctl |= PCGCTL_GATEHCLK;
-	dwc2_writel(hsotg, pcgctl, PCGCTL);
-	udelay(5);
+		/* Set the Gate hclk as suspend is received. */
+		pcgctl = dwc2_readl(hsotg, PCGCTL);
+		pcgctl |= PCGCTL_GATEHCLK;
+		dwc2_writel(hsotg, pcgctl, PCGCTL);
+		udelay(5);
+	}
 
 	hsotg->bus_suspended = true;
 	hsotg->lx_state = DWC2_L2;
@@ -5965,7 +5980,8 @@ void dwc2_host_enter_clock_gating(struct dwc2_hsotg *hsotg)
  * @hsotg: Programming view of the DWC_otg controller
  * @rem_wakeup: indicates whether resume is initiated by remote wakeup
  *
- * This function is for exiting Host mode clock gating.
+ * This function is for exiting Host mode clock gating. With
+ * ungated_port_suspend it resumes the port and does not touch the clocks.
  */
 void dwc2_host_exit_clock_gating(struct dwc2_hsotg *hsotg, int rem_wakeup)
 {
@@ -5974,17 +5990,19 @@ void dwc2_host_exit_clock_gating(struct dwc2_hsotg *hsotg, int rem_wakeup)
 
 	dev_dbg(hsotg->dev, "Exiting host clock gating.\n");
 
-	/* Clear the Gate hclk. */
-	pcgctl = dwc2_readl(hsotg, PCGCTL);
-	pcgctl &= ~PCGCTL_GATEHCLK;
-	dwc2_writel(hsotg, pcgctl, PCGCTL);
-	udelay(5);
+	if (!hsotg->params.ungated_port_suspend) {
+		/* Clear the Gate hclk. */
+		pcgctl = dwc2_readl(hsotg, PCGCTL);
+		pcgctl &= ~PCGCTL_GATEHCLK;
+		dwc2_writel(hsotg, pcgctl, PCGCTL);
+		udelay(5);
 
-	/* Phy Clock bit. */
-	pcgctl = dwc2_readl(hsotg, PCGCTL);
-	pcgctl &= ~PCGCTL_STOPPCLK;
-	dwc2_writel(hsotg, pcgctl, PCGCTL);
-	udelay(5);
+		/* Phy Clock bit. */
+		pcgctl = dwc2_readl(hsotg, PCGCTL);
+		pcgctl &= ~PCGCTL_STOPPCLK;
+		dwc2_writel(hsotg, pcgctl, PCGCTL);
+		udelay(5);
+	}
 
 	/* Drive resume signaling and exit suspend mode on the port. */
 	hprt0 = dwc2_read_hprt0(hsotg);

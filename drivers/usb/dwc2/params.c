@@ -102,9 +102,12 @@ static void dwc2_set_x2000_params(struct dwc2_hsotg *hsotg)
 		/*
 		 * The SDK's driver never writes PCGCTL: it neither gates the
 		 * clocks nor powers the core down when the bus is suspended.
+		 * It does suspend the port, which is what stops the start of
+		 * frame and its interrupt while no device is in use.
 		 */
 		p->power_down = DWC2_POWER_DOWN_PARAM_NONE;
 		p->no_clock_gating = true;
+		p->ungated_port_suspend = true;
 	}
 
 	/*
