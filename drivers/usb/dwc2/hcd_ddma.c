@@ -111,7 +111,8 @@ static void dwc2_desc_list_free(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh)
 	qh->n_bytes = NULL;
 }
 
-static int dwc2_frame_list_alloc(struct dwc2_hsotg *hsotg, gfp_t mem_flags)
+/* The caller holds hsotg->lock */
+static int dwc2_frame_list_alloc(struct dwc2_hsotg *hsotg)
 {
 	if (hsotg->frame_list)
 		return 0;
@@ -124,43 +125,55 @@ static int dwc2_frame_list_alloc(struct dwc2_hsotg *hsotg, gfp_t mem_flags)
 	hsotg->frame_list_dma = dma_map_single(hsotg->dev, hsotg->frame_list,
 					       hsotg->frame_list_sz,
 					       DMA_TO_DEVICE);
+	if (dma_mapping_error(hsotg->dev, hsotg->frame_list_dma)) {
+		kfree(hsotg->frame_list);
+		hsotg->frame_list = NULL;
+		return -ENOMEM;
+	}
 
 	return 0;
 }
 
-static void dwc2_frame_list_free(struct dwc2_hsotg *hsotg)
+/**
+ * dwc2_hcd_frame_list_free() - Stops the periodic schedule and frees the frame
+ * list
+ *
+ * @hsotg: The HCD state structure for the DWC OTG controller
+ *
+ * For when the HCD goes away. The list is made for the first periodic QH and
+ * kept from then on, whether or not a channel is in it.
+ */
+void dwc2_hcd_frame_list_free(struct dwc2_hsotg *hsotg)
 {
 	unsigned long flags;
+	u32 hcfg;
 
 	spin_lock_irqsave(&hsotg->lock, flags);
 
-	if (!hsotg->frame_list) {
-		spin_unlock_irqrestore(&hsotg->lock, flags);
-		return;
+	if (hsotg->frame_list) {
+		hcfg = dwc2_readl(hsotg, HCFG);
+		hcfg &= ~HCFG_PERSCHEDENA;
+		dev_vdbg(hsotg->dev, "Disabling Periodic schedule\n");
+		dwc2_writel(hsotg, hcfg, HCFG);
+
+		dma_unmap_single(hsotg->dev, hsotg->frame_list_dma,
+				 hsotg->frame_list_sz, DMA_TO_DEVICE);
+		kfree(hsotg->frame_list);
+		hsotg->frame_list = NULL;
 	}
-
-	dma_unmap_single(hsotg->dev, hsotg->frame_list_dma,
-			 hsotg->frame_list_sz, DMA_FROM_DEVICE);
-
-	kfree(hsotg->frame_list);
-	hsotg->frame_list = NULL;
 
 	spin_unlock_irqrestore(&hsotg->lock, flags);
 }
 
+/* The caller holds hsotg->lock */
 static void dwc2_per_sched_enable(struct dwc2_hsotg *hsotg, u32 fr_list_en)
 {
 	u32 hcfg;
-	unsigned long flags;
-
-	spin_lock_irqsave(&hsotg->lock, flags);
 
 	hcfg = dwc2_readl(hsotg, HCFG);
-	if (hcfg & HCFG_PERSCHEDENA) {
+	if (hcfg & HCFG_PERSCHEDENA)
 		/* already enabled */
-		spin_unlock_irqrestore(&hsotg->lock, flags);
 		return;
-	}
 
 	dwc2_writel(hsotg, hsotg->frame_list_dma, HFLBADDR);
 
@@ -168,29 +181,6 @@ static void dwc2_per_sched_enable(struct dwc2_hsotg *hsotg, u32 fr_list_en)
 	hcfg |= fr_list_en | HCFG_PERSCHEDENA;
 	dev_vdbg(hsotg->dev, "Enabling Periodic schedule\n");
 	dwc2_writel(hsotg, hcfg, HCFG);
-
-	spin_unlock_irqrestore(&hsotg->lock, flags);
-}
-
-static void dwc2_per_sched_disable(struct dwc2_hsotg *hsotg)
-{
-	u32 hcfg;
-	unsigned long flags;
-
-	spin_lock_irqsave(&hsotg->lock, flags);
-
-	hcfg = dwc2_readl(hsotg, HCFG);
-	if (!(hcfg & HCFG_PERSCHEDENA)) {
-		/* already disabled */
-		spin_unlock_irqrestore(&hsotg->lock, flags);
-		return;
-	}
-
-	hcfg &= ~HCFG_PERSCHEDENA;
-	dev_vdbg(hsotg->dev, "Disabling Periodic schedule\n");
-	dwc2_writel(hsotg, hcfg, HCFG);
-
-	spin_unlock_irqrestore(&hsotg->lock, flags);
 }
 
 /*
@@ -246,6 +236,13 @@ static void dwc2_update_frame_list(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh,
 
 	if (!enable)
 		return;
+
+	/*
+	 * The schedule is switched on here, with a channel in the list, and
+	 * not where the list is made: whatever has reset HCFG since, it is on
+	 * for every periodic transfer that starts.
+	 */
+	dwc2_per_sched_enable(hsotg, HCFG_FRLISTEN_64);
 
 	chan->schinfo = 0;
 	if (chan->speed == USB_SPEED_HIGH && qh->host_interval) {
@@ -307,11 +304,13 @@ static void dwc2_release_channel_ddma(struct dwc2_hsotg *hsotg,
  * Return: 0 if successful, negative error code otherwise
  *
  * Allocates memory for the descriptor list. For the first periodic QH,
- * allocates memory for the FrameList and enables periodic scheduling.
+ * allocates memory for the FrameList; periodic scheduling is enabled when a
+ * channel is put in it, dwc2_update_frame_list().
  */
 int dwc2_hcd_qh_init_ddma(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh,
 			  gfp_t mem_flags)
 {
+	unsigned long flags;
 	int retval;
 
 	if (qh->do_split) {
@@ -327,13 +326,12 @@ int dwc2_hcd_qh_init_ddma(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh,
 
 	if (qh->ep_type == USB_ENDPOINT_XFER_ISOC ||
 	    qh->ep_type == USB_ENDPOINT_XFER_INT) {
-		if (!hsotg->frame_list) {
-			retval = dwc2_frame_list_alloc(hsotg, mem_flags);
-			if (retval)
-				goto err1;
-			/* Enable periodic schedule on first periodic QH */
-			dwc2_per_sched_enable(hsotg, HCFG_FRLISTEN_64);
-		}
+		/* The first periodic QH makes the frame list */
+		spin_lock_irqsave(&hsotg->lock, flags);
+		retval = dwc2_frame_list_alloc(hsotg);
+		spin_unlock_irqrestore(&hsotg->lock, flags);
+		if (retval)
+			goto err1;
 	}
 
 	qh->ntd = 0;
@@ -352,8 +350,10 @@ err0:
  * @hsotg: The HCD state structure for the DWC OTG controller
  * @qh:    The QH to free
  *
- * Frees descriptor list memory associated with the QH. If QH is periodic and
- * the last, frees FrameList memory and disables periodic scheduling.
+ * Frees descriptor list memory associated with the QH. The frame list and the
+ * periodic schedule stay: the interrupt endpoints of a hub and of other
+ * devices are in them and have to go on when an isochronous endpoint is
+ * closed. They go with the HCD, dwc2_hcd_frame_list_free().
  */
 void dwc2_hcd_qh_free_ddma(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh)
 {
@@ -372,14 +372,6 @@ void dwc2_hcd_qh_free_ddma(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh)
 	if (qh->channel)
 		dwc2_release_channel_ddma(hsotg, qh);
 	spin_unlock_irqrestore(&hsotg->lock, flags);
-
-	if ((qh->ep_type == USB_ENDPOINT_XFER_ISOC ||
-	     qh->ep_type == USB_ENDPOINT_XFER_INT) &&
-	    (hsotg->params.uframe_sched ||
-	     !hsotg->periodic_channels) && hsotg->frame_list) {
-		dwc2_per_sched_disable(hsotg);
-		dwc2_frame_list_free(hsotg);
-	}
 }
 
 static u8 dwc2_frame_to_desc_idx(struct dwc2_qh *qh, u16 frame_idx)

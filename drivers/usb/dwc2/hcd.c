@@ -5038,6 +5038,9 @@ static void dwc2_hcd_free(struct dwc2_hsotg *hsotg)
 	dwc2_qh_list_free(hsotg, &hsotg->periodic_sched_assigned);
 	dwc2_qh_list_free(hsotg, &hsotg->periodic_sched_queued);
 
+	/* The frame list of descriptor DMA, if one was made */
+	dwc2_hcd_frame_list_free(hsotg);
+
 	/* Free memory for the host channels */
 	for (i = 0; i < MAX_EPS_CHANNELS; i++) {
 		struct dwc2_host_chan *chan = hsotg->hc_ptr_array[i];

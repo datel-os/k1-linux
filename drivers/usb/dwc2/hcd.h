@@ -565,6 +565,7 @@ void dwc2_hcd_complete_xfer_ddma(struct dwc2_hsotg *hsotg,
 int dwc2_hcd_qh_init_ddma(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh,
 			  gfp_t mem_flags);
 void dwc2_hcd_qh_free_ddma(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh);
+void dwc2_hcd_frame_list_free(struct dwc2_hsotg *hsotg);
 
 /* Check if QH is non-periodic */
 #define dwc2_qh_is_non_per(_qh_ptr_) \
