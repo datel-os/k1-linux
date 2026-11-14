@@ -32,9 +32,6 @@ extern void mmc_power_up(struct mmc_host *host, u32 ocr);
 extern void mmc_power_off(struct mmc_host *host);
 
 #define CLK_CTRL
-/* Software redefinition caps */
-#define CAPABILITIES1_SW    0x276dc898
-#define CAPABILITIES2_SW    0
 
 static LIST_HEAD(manual_list);
 
@@ -750,10 +747,6 @@ static int sdhci_ingenic_probe(struct platform_device *pdev)
 	host->ops = &sdhci_ingenic_ops;
 	host->quirks = 0;
 	host->irq = irq;
-
-	/* Software redefinition caps */
-	host->caps  = CAPABILITIES1_SW;
-	host->caps1 = CAPABILITIES2_SW;
 
 	/* not check wp */
 	host->quirks |= SDHCI_QUIRK_INVERTED_WRITE_PROTECT;

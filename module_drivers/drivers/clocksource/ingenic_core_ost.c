@@ -215,7 +215,7 @@ static u64 nebulaos_ost_read_cnt(void __iomem *iobase)
 	return ((u64)hi << 32) | lo;
 }
 
-static unsigned long long sched_clock(void)
+static unsigned long long core_ost_sched_clock(void)
 {
 	struct tmr_src *tmr = &g_tmr_src;
 	unsigned long flags;
@@ -265,7 +265,7 @@ static void __init core_clocksource_init(struct core_ost_chip *core_ost, struct 
 	ost_writel(1, iobase + G_OSTCR);
 
 	clocksource_register_hz(&tmr->cs, hz);
-	sched_clock_register(sched_clock, 64, hz);
+	sched_clock_register(core_ost_sched_clock, 64, hz);
 }
 
 static int core_timerevent_set_next_event(unsigned long evt,
@@ -557,14 +557,14 @@ static int __init ingenic_ost_init(struct device_node *np)
 	int index = 0;
 
 	g_iobase = of_io_request_and_map(np, 0, "ost");
-	if (g_iobase == NULL) {
+	if (IS_ERR(g_iobase)) {
 		pr_err("Failed to map global clocksource iobase!\n");
-		return -EINVAL;
+		return PTR_ERR(g_iobase);
 	}
 	core_iobase = of_io_request_and_map(np, 1, "core-ost");
-	if (core_iobase == NULL) {
+	if (IS_ERR(core_iobase)) {
 		pr_err("Failed to map core clockevent iobase!\n");
-		return -EINVAL;
+		return PTR_ERR(core_iobase);
 	}
 
 	irq = of_irq_get_byname(np, "sys_ost");

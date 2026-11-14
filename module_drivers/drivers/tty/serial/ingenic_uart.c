@@ -1603,8 +1603,8 @@ static int serial_ingenic_probe(struct platform_device *pdev)
 	up->port.flags = UPF_IOREMAP | UPF_BOOT_AUTOCONF;
 	up->port.uartclk = uartclk;
 	up->port.membase = devm_ioremap_resource(&pdev->dev, mmres);
-	if (!up->port.membase) {
-		return -ENOMEM;
+	if (IS_ERR(up->port.membase)) {
+		return PTR_ERR(up->port.membase);
 	}
 
 	if (up->use_dma) {
@@ -1617,21 +1617,24 @@ static int serial_ingenic_probe(struct platform_device *pdev)
 
 		up->chan_rx = dma_request_chan(&pdev->dev, "rx");
 		if (IS_ERR(up->chan_rx)) {
-			dev_err(up->port.dev, "%s:dma_request_channel FAILS(rx)\n", __func__);
-			return 0;
+			return dev_err_probe(up->port.dev, PTR_ERR(up->chan_rx),
+			                     "%s:dma_request_channel FAILS(rx)\n", __func__);
 		}
 
 		up->chan_tx = dma_request_chan(&pdev->dev, "tx");
 		if (IS_ERR(up->chan_tx)) {
-			dev_err(up->port.dev, "%s:dma_request_channel FAILS(tx)\n", __func__);
-			return 0;
+			dma_release_channel(up->chan_rx);
+			return dev_err_probe(up->port.dev, PTR_ERR(up->chan_tx),
+			                     "%s:dma_request_channel FAILS(tx)\n", __func__);
 		}
 
 		up->rx_buf_virt = dma_alloc_coherent(up->port.dev, (DESC_NUM * DESC_SIZE),
 		                                     &up->rx_buf_dma, GFP_KERNEL);
 		if (!up->rx_buf_virt) {
 			dev_err(up->port.dev, "up->rx_buf_virt fail\n");
-			return 0;
+			dma_release_channel(up->chan_tx);
+			dma_release_channel(up->chan_rx);
+			return -ENOMEM;
 		}
 
 		tasklet_init(&up->tasklet_dma_tx, ingenic_dma_tx, (unsigned long)up);

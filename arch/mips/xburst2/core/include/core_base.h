@@ -5,7 +5,6 @@
 
 #ifndef __ASSEMBLY__
 void *get_fdt_addr(void);
-unsigned int arch_get_ddr_size(void);
 #endif
 
 #endif /* __CORE_BASE_H__ */

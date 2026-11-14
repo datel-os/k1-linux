@@ -308,8 +308,6 @@ struct ingenic_gpio_chip {
 	struct pinctrl_gpio_range   grange;
 	struct ingenic_pinctrl      *pctl;
 	raw_spinlock_t      lock;               /*gpio func write lock*/
-	u32             *mcu_gpio_reg;          /*used for gpio irq to mcu
-                                      mcu's pending register*/
 	u32             used_pins_bitmap;           /*bitmap of pins for been had requested*/
 	u32             pinmux_used_bitmap;         /* NebulaOS pinctrl ownership fix
                                      (2026-08-03): tracks pins actively claimed
