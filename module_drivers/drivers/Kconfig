@@ -27,10 +27,6 @@ menu "[I2C] Master Drivers"
 source "module_drivers/drivers/i2c/busses/Kconfig"
 endmenu
 
-menu "[USB] Drivers"
-source "module_drivers/drivers/usb/phy/Kconfig"
-endmenu
-
 menu "[WDT] Drivers"
 source "module_drivers/drivers/watchdog/Kconfig"
 endmenu

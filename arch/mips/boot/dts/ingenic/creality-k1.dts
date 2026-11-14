@@ -81,6 +81,19 @@
 	};
 
 	/*
+	 * The board's 3.3 V rail, on whenever the board has power. Nothing
+	 * switches it; it is here because the USB transceiver's binding asks
+	 * for the transceiver's supply.
+	 */
+	vcc_3v3: regulator-vcc-3v3 {
+		compatible = "regulator-fixed";
+		regulator-name = "vcc_3v3";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-always-on;
+	};
+
+	/*
 	 * VBUS of the USB port: PA15, high for on, as the stock firmware
 	 * drives it while the port is a host.
 	 *
@@ -250,11 +263,12 @@
 };
 
 /*
- * external-vbus-detect: the PHY's VBUS comparator stays off; the port is a
- * host port and nothing senses VBUS.
+ * The port is a host port and nothing senses VBUS. The SDK's driver switched
+ * the transceiver's VBUS comparator off for that; upstream's leaves it as it
+ * comes out of reset, and the port does not care.
  */
 &otg_phy {
-	external-vbus-detect;
+	vcc-supply = <&vcc_3v3>;
 	status = "okay";
 };
 

@@ -8,4 +8,3 @@ obj-y += tty/
 obj-y += rtc/
 obj-y += watchdog/
 obj-y += irqchip/
-obj-y += usb/
