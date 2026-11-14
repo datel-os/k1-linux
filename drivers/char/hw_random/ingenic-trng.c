@@ -14,6 +14,7 @@
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/property.h>
 #include <linux/slab.h>
 
 /* DTRNG register offsets */
@@ -23,14 +24,44 @@
 
 /* bits within the CFG register */
 #define CFG_GEN_EN					BIT(0)
+#define CFG_RDY_CLR					BIT(12)
 
 /* bits within the STATUS register */
 #define STATUS_RANDOM_RDY			BIT(0)
 
+/*
+ * The X2000's bits are not independent of each other: over 16 million of them
+ * a bit equalled the one before it 48.2 % of the time, and Markov models up to
+ * order 12 put the min-entropy at 0.94 bit per bit. Claim less than that.
+ */
+#define X2000_QUALITY				900
+
+enum ingenic_trng_version {
+	ID_X1830,
+	ID_X2000,
+};
+
 struct ingenic_trng {
 	void __iomem *base;
 	struct hwrng rng;
+	enum ingenic_trng_version version;
 };
+
+/*
+ * On the X2000 the ready flag stays set once 32 bits have been collected,
+ * while the number register goes on shifting new bits in. A read that follows
+ * another within about a microsecond would return some of the same bits.
+ * CFG_RDY_CLR is a level: it holds the flag and the register at zero. After
+ * its release the flag says that 32 bits have come in which nobody has read.
+ */
+static void ingenic_trng_restart(struct ingenic_trng *trng)
+{
+	unsigned int ctrl;
+
+	ctrl = readl(trng->base + TRNG_REG_CFG_OFFSET);
+	writel(ctrl | CFG_RDY_CLR, trng->base + TRNG_REG_CFG_OFFSET);
+	writel(ctrl & ~CFG_RDY_CLR, trng->base + TRNG_REG_CFG_OFFSET);
+}
 
 static int ingenic_trng_init(struct hwrng *rng)
 {
@@ -40,6 +71,9 @@ static int ingenic_trng_init(struct hwrng *rng)
 	ctrl = readl(trng->base + TRNG_REG_CFG_OFFSET);
 	ctrl |= CFG_GEN_EN;
 	writel(ctrl, trng->base + TRNG_REG_CFG_OFFSET);
+
+	if (trng->version >= ID_X2000)
+		ingenic_trng_restart(trng);
 
 	return 0;
 }
@@ -70,6 +104,9 @@ static int ingenic_trng_read(struct hwrng *rng, void *buf, size_t max, bool wait
 
 	*data = readl(trng->base + TRNG_REG_RANDOMNUM_OFFSET);
 
+	if (trng->version >= ID_X2000)
+		ingenic_trng_restart(trng);
+
 	return 4;
 }
 
@@ -93,10 +130,14 @@ static int ingenic_trng_probe(struct platform_device *pdev)
 		return dev_err_probe(&pdev->dev, PTR_ERR(clk),
 				     "%s: Cannot get and enable DTRNG clock\n", __func__);
 
+	trng->version = (uintptr_t)device_get_match_data(&pdev->dev);
+
 	trng->rng.name = pdev->name;
 	trng->rng.init = ingenic_trng_init;
 	trng->rng.cleanup = ingenic_trng_cleanup;
 	trng->rng.read = ingenic_trng_read;
+	if (trng->version >= ID_X2000)
+		trng->rng.quality = X2000_QUALITY;
 
 	ret = devm_hwrng_register(&pdev->dev, &trng->rng);
 	if (ret)
@@ -109,7 +150,8 @@ static int ingenic_trng_probe(struct platform_device *pdev)
 }
 
 static const struct of_device_id ingenic_trng_of_match[] = {
-	{ .compatible = "ingenic,x1830-dtrng" },
+	{ .compatible = "ingenic,x1830-dtrng", .data = (void *)ID_X1830 },
+	{ .compatible = "ingenic,x2000-dtrng", .data = (void *)ID_X2000 },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, ingenic_trng_of_match);
