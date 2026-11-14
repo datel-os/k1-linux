@@ -16,6 +16,7 @@ properties:
   compatible:
     enum:
       - ingenic,x1830-dtrng
+      - ingenic,x2000-dtrng
 
   reg:
     maxItems: 1
