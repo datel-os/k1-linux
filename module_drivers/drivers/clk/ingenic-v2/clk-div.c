@@ -89,12 +89,17 @@ static unsigned long clk_cgu_divider_recalc_rate(struct clk_hw *hw,
 	return cgu_div->div_ops->recalc_rate(&cgu_div->div.hw, parent_rate);
 }
 
-static long clk_cgu_divider_round_rate(struct clk_hw *hw, unsigned long rate,
-                                       unsigned long *prate)
+/*
+ * The common divider rounds through determine_rate() only: clk_divider_ops
+ * has no round_rate() any more, and a call through that member is a jump
+ * to address 0.
+ */
+static int clk_cgu_divider_determine_rate(struct clk_hw *hw,
+        struct clk_rate_request *req)
 {
 	struct clk_cgu_divider *cgu_div = to_clk_cgu_divider(hw);
 
-	return  cgu_div->div_ops->round_rate(&cgu_div->div.hw, rate, prate);
+	return cgu_div->div_ops->determine_rate(&cgu_div->div.hw, req);
 }
 
 static int clk_cgu_divider_set_rate(struct clk_hw *hw, unsigned long rate, unsigned long parent_rate)
@@ -155,7 +160,7 @@ static int clk_cgu_divider_enable(struct clk_hw *hw)
 
 static struct clk_ops clk_cgu_divider_ops = {
 	.recalc_rate = clk_cgu_divider_recalc_rate,
-	.round_rate = clk_cgu_divider_round_rate,
+	.determine_rate = clk_cgu_divider_determine_rate,
 	.set_rate = clk_cgu_divider_set_rate,
 	.enable = clk_cgu_divider_enable,
 	.disable = clk_cgu_divider_disable,

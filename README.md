@@ -2,7 +2,7 @@
 
 The kernel of [Datel OS](https://github.com/zales/datel-os) for the Creality K1 3D printer, whose mainboard carries an Ingenic X2000: two XBurst2 MIPS32 cores and 256 MB of RAM. It is kernel.org's stable Linux 6.18 plus the support the board needs, added through pull requests.
 
-**State:** phase A is under way. The tree builds a kernel for the K1 (`k1_defconfig`) with the board's device tree built in; it has not run on a printer yet. Datel OS ships Ingenic's SDK kernel 6.6 until phase A below is complete.
+**State:** phase A runs on the printer. On 14 November 2026 a kernel built from this tree (`k1_defconfig`, the board's device tree built in) booted a K1 and passed phase A's checks, a test print excepted: both CPU cores at 816 MHz, Klipper with its three microcontrollers, Wi-Fi, the camera over WebRTC, the Helix codec's tests, 25 minutes of floating-point work on a hot printer without a wrong result, and a restart by the watchdog with the kernel log kept in pstore. Datel OS ships Ingenic's SDK kernel 6.6 until phase A below is complete.
 
 The kernel's own introduction is in [README](README).
 
@@ -16,13 +16,13 @@ Mainline has drivers for some of the X2000 (pin control, USB, SPI, Ethernet) but
 
 | Part | Phase A: carried over | Phase B: rewritten |
 |---|---|---|
-| Platform (`arch/mips/xburst2`), boot image | carried over, not run yet | not yet |
-| Clocks, timer, interrupt controller | carried over, not run yet | not yet |
-| Pin control, serial | carried over, not run yet | not yet |
-| MMC, DMA, I2C | carried over, not run yet | not yet |
-| USB | transceiver carried over, upstream's `dwc2`; not run yet | not yet |
-| TCU, watchdog, RTC, random number generator | carried over, not run yet | not yet |
-| The K1 board: device tree, `k1_defconfig`, Helix codec driver, pstore | device tree cut down from the SDK's, board file written, Helix driver from Datel OS; not run yet | not yet |
+| Platform (`arch/mips/xburst2`), boot image | carried over; runs on the printer | not yet |
+| Clocks, timer, interrupt controller | carried over; runs on the printer | not yet |
+| Pin control, serial | carried over; runs on the printer | not yet |
+| MMC, DMA, I2C | carried over; MMC runs on the printer (the eMMC, Wi-Fi over SDIO); DMA and I2C start, and nothing on the K1 used them in the test | not yet |
+| USB | transceiver carried over, upstream's `dwc2`; runs on the printer (the hub, the camera) | not yet |
+| TCU, watchdog, RTC, random number generator | carried over; runs on the printer | not yet |
+| The K1 board: device tree, `k1_defconfig`, Helix codec driver, pstore | device tree cut down from the SDK's, board file written, Helix driver from Datel OS; runs on the printer | not yet |
 
 The carried code keeps the SDK's paths, so a file can be compared with its origin: the platform in `arch/mips/xburst2`, the drivers in `module_drivers/`. What the SDK changes in the kernel's own files is tied to `CONFIG_MACH_XBURST2`. The device tree is where upstream keeps Ingenic's, `arch/mips/boot/dts/ingenic/`: `x2000.dtsi` and `x2000-pinctrl.dtsi` for the SoC, `creality-k1.dts` for the board.
 
