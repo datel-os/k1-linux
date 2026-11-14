@@ -40,6 +40,35 @@
 
 #define TTY_BUFFER_PAGE	(((PAGE_SIZE - sizeof(struct tty_buffer)) / 2) & ~TTYB_ALIGN_MASK)
 
+/*
+ * On the Creality K1 (MACH_XBURST2) the flip buffer work runs on a queue of
+ * its own, unbound and at high priority (nice -20), not on system_unbound_wq
+ * (nice 0): what a serial port or a pty has received reaches its reader ahead
+ * of other load. The printer's microcontrollers are on serial ports, and
+ * Klipper counts on hearing from them in time. From NebulaOS.
+ *
+ * WQ_SYSFS shows the queue's nice value and CPU mask under
+ * /sys/devices/virtual/workqueue/tty_flip. Until the queue exists, and
+ * anywhere else, the system's queue is used.
+ */
+static struct workqueue_struct *tty_flip_wq __read_mostly;
+
+static inline struct workqueue_struct *tty_flip_queue(void)
+{
+	return READ_ONCE(tty_flip_wq) ?: system_unbound_wq;
+}
+
+static int __init tty_flip_wq_init(void)
+{
+	if (!IS_ENABLED(CONFIG_MACH_XBURST2))
+		return 0;
+
+	tty_flip_wq = alloc_workqueue("tty_flip",
+				      WQ_UNBOUND | WQ_HIGHPRI | WQ_SYSFS, 0);
+	return tty_flip_wq ? 0 : -ENOMEM;
+}
+postcore_initcall(tty_flip_wq_init);	/* after wq_sysfs_init(), a core_initcall */
+
 /**
  * tty_buffer_lock_exclusive	-	gain exclusive access to buffer
  * @port: tty port owning the flip buffer
@@ -76,7 +105,7 @@ void tty_buffer_unlock_exclusive(struct tty_port *port)
 	mutex_unlock(&buf->lock);
 
 	if (restart)
-		queue_work(system_unbound_wq, &buf->work);
+		queue_work(tty_flip_queue(), &buf->work);
 }
 EXPORT_SYMBOL_GPL(tty_buffer_unlock_exclusive);
 
@@ -530,7 +559,7 @@ void tty_flip_buffer_push(struct tty_port *port)
 	struct tty_bufhead *buf = &port->buf;
 
 	tty_flip_buffer_commit(buf->tail);
-	queue_work(system_unbound_wq, &buf->work);
+	queue_work(tty_flip_queue(), &buf->work);
 }
 EXPORT_SYMBOL(tty_flip_buffer_push);
 
@@ -560,7 +589,7 @@ int tty_insert_flip_string_and_push_buffer(struct tty_port *port,
 		tty_flip_buffer_commit(buf->tail);
 	spin_unlock_irqrestore(&port->lock, flags);
 
-	queue_work(system_unbound_wq, &buf->work);
+	queue_work(tty_flip_queue(), &buf->work);
 
 	return size;
 }
@@ -613,7 +642,7 @@ void tty_buffer_set_lock_subclass(struct tty_port *port)
 
 bool tty_buffer_restart_work(struct tty_port *port)
 {
-	return queue_work(system_unbound_wq, &port->buf.work);
+	return queue_work(tty_flip_queue(), &port->buf.work);
 }
 
 bool tty_buffer_cancel_work(struct tty_port *port)

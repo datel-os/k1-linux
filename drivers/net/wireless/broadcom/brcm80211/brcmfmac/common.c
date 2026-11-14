@@ -59,7 +59,14 @@ static int brcmf_fcmode;
 module_param_named(fcmode, brcmf_fcmode, int, 0);
 MODULE_PARM_DESC(fcmode, "Mode of firmware signalled flow control");
 
-static int brcmf_roamoff;
+/*
+ * On the Creality K1 (MACH_XBURST2) the firmware's roaming engine is off by
+ * default. The printer does not move, and NebulaOS found the engine's scans
+ * of other channels to be one cause of failed transmissions while a camera
+ * stream runs. Connecting and scanning for networks do not depend on it. As
+ * a module the driver takes roamoff=0 or 1 like anywhere else.
+ */
+static int brcmf_roamoff = IS_ENABLED(CONFIG_MACH_XBURST2);
 module_param_named(roamoff, brcmf_roamoff, int, 0400);
 MODULE_PARM_DESC(roamoff, "Do not use internal roaming engine");
 
