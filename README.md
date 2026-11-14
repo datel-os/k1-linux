@@ -19,9 +19,9 @@ Mainline has drivers for some of the X2000 (pin control, USB, SPI, Ethernet) but
 | Platform (`arch/mips/xburst2`), boot image | carried over; runs on the printer | not yet |
 | Clocks, timer, interrupt controller | carried over; runs on the printer | not yet |
 | Pin control, serial | carried over; runs on the printer | not yet |
-| MMC, DMA, I2C | carried over; MMC runs on the printer (the eMMC, Wi-Fi over SDIO); DMA and I2C start, and nothing on the K1 used them in the test | not yet |
+| MMC, I2C | carried over; MMC runs on the printer (the eMMC, Wi-Fi over SDIO); I2C starts, and nothing on the K1 used it in the test. The DMA driver came with them and is removed again: no device asked it for a channel | not yet |
 | USB | transceiver carried over; upstream's `dwc2`, with its descriptor DMA path for isochronous endpoints corrected (the camera's stream stopped for good without that); runs on the printer (the hub, the camera) | not yet |
-| TCU, watchdog, RTC, random number generator | carried over; runs on the printer | not yet |
+| Watchdog, RTC, random number generator | carried over; runs on the printer. The TCU driver came with them and is removed again: the K1 has nothing for it to serve | not yet |
 | The K1 board: device tree, `k1_defconfig`, Helix codec driver, pstore | device tree cut down from the SDK's, board file written, Helix driver from Datel OS; runs on the printer | not yet |
 
 The carried code keeps the SDK's paths, so a file can be compared with its origin: the platform in `arch/mips/xburst2`, the drivers in `module_drivers/`. What the SDK changes in the kernel's own files is tied to `CONFIG_MACH_XBURST2`. The device tree is where upstream keeps Ingenic's, `arch/mips/boot/dts/ingenic/`: `x2000.dtsi` and `x2000-pinctrl.dtsi` for the SoC, `creality-k1.dts` for the board.

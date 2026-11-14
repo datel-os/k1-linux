@@ -8,7 +8,6 @@
  */
 
 #include <dt-bindings/interrupt-controller/x2000-irq.h>
-#include <dt-bindings/clock/ingenic-tcu.h>
 #include <dt-bindings/clock/ingenic-x2000.h>
 #include <dt-bindings/gpio/ingenic-gpio.h>
 
@@ -115,17 +114,6 @@
 			clock-names = "ext", "rtc_ext";
 			#clock-cells = <1>;
 			little-endian;
-		};
-
-		tcu: tcu@10002000 {
-			compatible = "ingenic,tcu";
-			reg = <0x10002000 0x1000>;
-			interrupt-parent = <&core_intc>;
-			interrupt-names = "default";
-			interrupts = <IRQ_TCU0>;
-			clocks = <&clock CLK_GATE_TCU>;
-			clock-names = "gate_tcu";
-			status = "ok";
 		};
 
 		watchdog: watchdog@10002000 {
@@ -423,17 +411,6 @@
 			status = "disabled";
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_MSC2>;
-		};
-
-		pdma: dma@13420000 {
-			compatible = "ingenic,x2000-pdma";
-			reg = <0x13420000 0x10000>;
-			interrupt-parent = <&core_intc>;
-			interrupt-names = "pdma", "pdmad";
-			interrupts = <IRQ_PDMA>, <IRQ_PDMAD>;
-			#dma-channels = <32>;
-			#dma-cells = <1>;
-			ingenic,reserved-chs = <0x3>;
 		};
 
 		otg: otg@13500000 {
