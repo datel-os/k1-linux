@@ -58,12 +58,17 @@ static unsigned long clk_bus_divider_recalc_rate(struct clk_hw *hw,
 	return bus_div->div_ops->recalc_rate(&bus_div->div.hw, parent_rate);
 }
 
-static long clk_bus_divider_round_rate(struct clk_hw *hw, unsigned long rate,
-                                       unsigned long *prate)
+/*
+ * The common divider rounds through determine_rate() only: clk_divider_ops
+ * has no round_rate() any more, and a call through that member is a jump
+ * to address 0.
+ */
+static int clk_bus_divider_determine_rate(struct clk_hw *hw,
+        struct clk_rate_request *req)
 {
 	struct clk_bus_divider *bus_div = to_clk_bus_divider(hw);
 
-	return bus_div->div_ops->round_rate(&bus_div->div.hw, rate, prate);
+	return bus_div->div_ops->determine_rate(&bus_div->div.hw, req);
 }
 
 static int clk_bus_divider_set_rate(struct clk_hw *hw, unsigned long rate,
@@ -126,7 +131,7 @@ static int clk_bus_divider_set_rate(struct clk_hw *hw, unsigned long rate,
 
 static struct clk_ops clk_bus_divider_ops = {
 	.recalc_rate = clk_bus_divider_recalc_rate,
-	.round_rate = clk_bus_divider_round_rate,
+	.determine_rate = clk_bus_divider_determine_rate,
 	.set_rate = clk_bus_divider_set_rate,
 };
 
