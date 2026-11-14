@@ -10,9 +10,9 @@
 # is upstream's cu1830-neo_defconfig, the closest relative in the tree
 # (Ingenic X1830, little endian).
 #
-# The repository is private, so the minutes are limited: one job, a compiler
-# cache that lets a later run compile only what changed, runs for a superseded
-# push cancelled, and none at all for changes to documentation alone.
+# It is kept cheap: one job, a compiler cache that lets a later run compile
+# only what changed, runs for a superseded push cancelled, and none at all for
+# changes to documentation alone.
 name: build
 
 on:
