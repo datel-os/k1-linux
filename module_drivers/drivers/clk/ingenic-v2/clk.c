@@ -104,11 +104,17 @@ void ingenic_clk_of_dump(struct ingenic_clk_provider *ctx)
 
 }
 
-/* add a clock instance to the clock lookup table used for dt based lookup */
+/*
+ * add a clock instance to the clock lookup table used for dt based lookup
+ *
+ * Identifier 0 is a clock like any other: in the X2000's binding header it is
+ * CLK_EXT, the crystal. (The SDK left slot 0 empty, as "no identifier", and
+ * so the crystal could not be named in a device tree.)
+ */
 void ingenic_clk_add_lookup(struct ingenic_clk_provider *ctx, struct clk *clk,
                             unsigned int id)
 {
-	if (ctx->clk_data.clks && id) {
+	if (ctx->clk_data.clks) {
 		ctx->clk_data.clks[id] = clk;
 	}
 }
