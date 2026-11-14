@@ -148,7 +148,8 @@
 #define CLK_CE_I2S1     (CLK_ID_GATE + 64)
 #define CLK_CE_I2S2     (CLK_ID_GATE + 65)
 #define CLK_CE_I2S3     (CLK_ID_GATE + 66)
-#define CLK_NR_GATE     (67)
+#define CLK_OTG_PHY     (CLK_ID_GATE + 67)
+#define CLK_NR_GATE     (68)
 
 #define POWER_ID        (CLK_ID_GATE + CLK_NR_GATE)
 #define POWER_ISP0      (POWER_ID + 0)

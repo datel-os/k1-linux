@@ -212,6 +212,11 @@ static struct ingenic_gate_clock x2000_gate_clks[] __initdata = {
 	GATE(CLK_GATE_SMB5, "gate_i2c5",        "div_apb",  CPM_CLKGR1, 1,  0,          CLK_GATE_SET_TO_DISABLE),
 	GATE(CLK_GATE_SMB4, "gate_i2c4",        "div_apb",  CPM_CLKGR1, 0,  0,          CLK_GATE_SET_TO_DISABLE),
 	GATE(CLK_GATE_USBPHY,   "gate_usbphy",      "div_apb",  CPM_OPCR,   23, 0,          CLK_GATE_SET_TO_DISABLE),
+	/*
+	 * OPCR.SPENDN0 takes the USB transceiver out of suspend. Upstream's
+	 * X1000 clock driver has the bit as its clock "otg_phy".
+	 */
+	GATE(CLK_OTG_PHY,       "otg_phy",          "gate_usbphy", CPM_OPCR, 7, 0,          0),
 	GATE(CLK_GATE_CIM_MCLK, "gate_cim_mclk",    "div_apb",  CPM_OPCR,   5, 0,           CLK_GATE_SET_TO_DISABLE),
 	GATE(CLK_CE_I2S0,   "ce_i2s0",      "div_i2s0", CPM_I2S0CDR, 29, 0, 0),
 	GATE(CLK_CE_I2S1,   "ce_i2s1",      "div_i2s1", CPM_I2S1CDR, 29, 0, 0),

@@ -1,7 +1,0 @@
-# SPDX-License-Identifier: GPL-2.0
-config INGENIC_USB_PHY
-	tristate "Ingenic USB Physical Layer Drivers"
-	select USB_PHY
-	help
-	  Enable this to support Ingenic USB phy helper driver for ingenic SoCs.
-	  This driver provides common interface to interact, typically used for INGENIC SOCs.
