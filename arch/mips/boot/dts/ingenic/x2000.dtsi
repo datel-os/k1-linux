@@ -9,6 +9,7 @@
 
 #include <dt-bindings/interrupt-controller/x2000-irq.h>
 #include <dt-bindings/clock/ingenic-x2000.h>
+#include <dt-bindings/clock/ingenic,tcu.h>
 #include <dt-bindings/gpio/ingenic-gpio.h>
 
 / {
@@ -116,12 +117,36 @@
 			little-endian;
 		};
 
-		watchdog: watchdog@10002000 {
-			compatible = "ingenic,watchdog";
-			reg = <0x10002000 0x40>;
+		tcu: timer@10002000 {
+			compatible = "ingenic,x2000-tcu", "ingenic,x1000-tcu", "simple-mfd";
+			reg = <0x10002000 0x1000>;
+			#address-cells = <1>;
+			#size-cells = <1>;
+			ranges = <0x0 0x10002000 0x1000>;
+
+			#clock-cells = <1>;
+
+			clocks = <&clock CLK_MUX_WDT>, <&clock CLK_EXT>,
+				 <&clock CLK_DIV_APB>, <&clock CLK_GATE_TCU>;
+			clock-names = "rtc", "ext", "pclk", "tcu";
+
+			interrupt-controller;
+			#interrupt-cells = <1>;
+
 			interrupt-parent = <&core_intc>;
-			interrupts = <IRQ_TCU0>;
-			status = "ok";
+			interrupts = <IRQ_TCU0>, <IRQ_TCU1>, <IRQ_TCU2>;
+
+			watchdog: watchdog@0 {
+				compatible = "ingenic,x2000-watchdog";
+				reg = <0x0 0x10>;
+
+				clocks = <&tcu TCU_CLK_WDT>;
+				clock-names = "wdt";
+
+				/* the TCU's line itself, not one of its channels */
+				interrupt-parent = <&core_intc>;
+				interrupts = <IRQ_TCU0>;
+			};
 		};
 
 		rtc: rtc@10003000 {
