@@ -23,16 +23,16 @@
 		i2c3 = &i2c3;
 		i2c4 = &i2c4;
 		i2c5 = &i2c5;
-		uart0 = &uart0;
-		uart1 = &uart1;
-		uart2 = &uart2;
-		uart3 = &uart3;
-		uart4 = &uart4;
-		uart5 = &uart5;
-		uart6 = &uart6;
-		uart7 = &uart7;
-		uart8 = &uart8;
-		uart9 = &uart9;
+		serial0 = &uart0;
+		serial1 = &uart1;
+		serial2 = &uart2;
+		serial3 = &uart3;
+		serial4 = &uart4;
+		serial5 = &uart5;
+		serial6 = &uart6;
+		serial7 = &uart7;
+		serial8 = &uart8;
+		serial9 = &uart9;
 		mmc0 = &msc0;
 		mmc1 = &msc1;
 		mmc2 = &msc2;
@@ -197,106 +197,96 @@
 		};
 
 		uart0: serial@10030000 {
-			compatible = "ingenic,8250-uart";
+			compatible = "ingenic,x2000-uart", "ingenic,x1000-uart";
 			reg = <0x10030000 0x100>;
-			reg-shift = <2>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_UART0>;
-			clocks = <&clock CLK_GATE_UART0>;
-			clock-names = "uart0";
+			clocks = <&clock CLK_EXT>, <&clock CLK_GATE_UART0>;
+			clock-names = "baud", "module";
 			status = "disabled";
 		};
 		uart1: serial@10031000 {
-			compatible = "ingenic,8250-uart";
+			compatible = "ingenic,x2000-uart", "ingenic,x1000-uart";
 			reg = <0x10031000 0x100>;
-			reg-shift = <2>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_UART1>;
-			clocks = <&clock CLK_GATE_UART1>;
-			clock-names = "uart1";
+			clocks = <&clock CLK_EXT>, <&clock CLK_GATE_UART1>;
+			clock-names = "baud", "module";
 			status = "disabled";
 		};
 		uart2: serial@10032000 {
-			compatible = "ingenic,8250-uart";
+			compatible = "ingenic,x2000-uart", "ingenic,x1000-uart";
 			reg = <0x10032000 0x100>;
-			reg-shift = <2>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_UART2>;
-			clocks = <&clock CLK_GATE_UART2>;
-			clock-names = "uart2";
+			clocks = <&clock CLK_EXT>, <&clock CLK_GATE_UART2>;
+			clock-names = "baud", "module";
 			status = "disabled";
 		};
 		uart3: serial@10033000 {
-			compatible = "ingenic,8250-uart";
+			compatible = "ingenic,x2000-uart", "ingenic,x1000-uart";
 			reg = <0x10033000 0x100>;
-			reg-shift = <2>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_UART3>;
-			clocks = <&clock CLK_GATE_UART3>;
-			clock-names = "uart3";
+			clocks = <&clock CLK_EXT>, <&clock CLK_GATE_UART3>;
+			clock-names = "baud", "module";
 			status = "disabled";
 		};
 
 		uart4: serial@10034000 {
-			compatible = "ingenic,8250-uart";
+			compatible = "ingenic,x2000-uart", "ingenic,x1000-uart";
 			reg = <0x10034000 0x100>;
-			reg-shift = <2>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_UART4>;
+			clocks = <&clock CLK_EXT>, <&clock CLK_GATE_UART4>;
+			clock-names = "baud", "module";
 			status = "disabled";
-			clocks = <&clock CLK_GATE_UART4>;
-			clock-names = "uart4";
 		};
 		uart5: serial@10035000 {
-			compatible = "ingenic,8250-uart";
+			compatible = "ingenic,x2000-uart", "ingenic,x1000-uart";
 			reg = <0x10035000 0x100>;
-			reg-shift = <2>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_UART5>;
+			clocks = <&clock CLK_EXT>, <&clock CLK_GATE_UART5>;
+			clock-names = "baud", "module";
 			status = "disabled";
-			clocks = <&clock CLK_GATE_UART5>;
-			clock-names = "uart5";
 		};
 		uart6: serial@10036000 {
-			compatible = "ingenic,8250-uart";
+			compatible = "ingenic,x2000-uart", "ingenic,x1000-uart";
 			reg = <0x10036000 0x100>;
-			reg-shift = <2>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_UART6>;
+			clocks = <&clock CLK_EXT>, <&clock CLK_GATE_UART6>;
+			clock-names = "baud", "module";
 			status = "disabled";
-			clocks = <&clock CLK_GATE_UART6>;
-			clock-names = "uart6";
 		};
 		uart7: serial@10037000 {
-			compatible = "ingenic,8250-uart";
+			compatible = "ingenic,x2000-uart", "ingenic,x1000-uart";
 			reg = <0x10037000 0x100>;
-			reg-shift = <2>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_UART7>;
+			clocks = <&clock CLK_EXT>, <&clock CLK_GATE_UART7>;
+			clock-names = "baud", "module";
 			status = "disabled";
-			clocks = <&clock CLK_GATE_UART7>;
-			clock-names = "uart7";
 		};
 
 		uart8: serial@10038000 {
-			compatible = "ingenic,8250-uart";
+			compatible = "ingenic,x2000-uart", "ingenic,x1000-uart";
 			reg = <0x10038000 0x100>;
-			reg-shift = <2>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_UART8>;
+			clocks = <&clock CLK_EXT>, <&clock CLK_GATE_UART8>;
+			clock-names = "baud", "module";
 			status = "disabled";
-			clocks = <&clock CLK_GATE_UART8>;
-			clock-names = "uart8";
 		};
 		uart9: serial@10039000 {
-			compatible = "ingenic,8250-uart";
+			compatible = "ingenic,x2000-uart", "ingenic,x1000-uart";
 			reg = <0x10039000 0x100>;
-			reg-shift = <2>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_UART9>;
+			clocks = <&clock CLK_EXT>, <&clock CLK_GATE_UART9>;
+			clock-names = "baud", "module";
 			status = "disabled";
-			clocks = <&clock CLK_GATE_UART9>;
-			clock-names = "uart9";
 		};
 
 		i2c0: i2c@10050000 {
