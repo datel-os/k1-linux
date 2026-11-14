@@ -38,7 +38,3 @@ endmenu
 menu "[RTC] Drivers"
 source "module_drivers/drivers/rtc/Kconfig"
 endmenu
-
-menu "[CHAR] Drivers"
-source "module_drivers/drivers/char/Kconfig"
-endmenu

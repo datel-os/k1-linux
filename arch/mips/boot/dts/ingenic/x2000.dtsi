@@ -365,11 +365,10 @@
 			status = "disabled";
 		};
 
-		dtrng: dtrng@10072000 {
-			compatible = "ingenic,dtrng";
-			reg = <0x10072000 0x100>;
-			interrupt-parent = <&core_intc>;
-			interrupts = <IRQ_DTRNG>;
+		dtrng: trng@10072000 {
+			compatible = "ingenic,x2000-dtrng";
+			reg = <0x10072000 0xc>;
+			clocks = <&clock CLK_GATE_DTRNG>;
 			status = "disabled";
 		};
 
