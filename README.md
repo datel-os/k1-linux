@@ -66,11 +66,12 @@ make ARCH=mips CROSS_COMPILE=mipsel-linux-gnu- O=build -j"$(nproc)"
 
 The image for the printer is `build/arch/mips/boot/uzImage.bin`: the self-extracting kernel in a U-Boot header, loaded at `0x80f00000`. The stock boot loader takes nothing else; it cannot unpack a kernel itself. `mkimage` comes from the package `u-boot-tools`.
 
-A kernel meant for a printer needs three things more:
+A kernel meant for a printer needs four things more:
 
 - `LOCALVERSION=` on both `make` lines. Built from a git checkout the release is otherwise `6.18.63+`, and the modules' directory has to carry the same name.
 - The modules, `make … INSTALL_MOD_PATH=<root> modules_install`. The Wi-Fi driver `brcmfmac` is one: it reads its firmware from the root file system, which a built-in driver would ask for before that is mounted.
 - The wireless regulatory database as built-in firmware, `CONFIG_EXTRA_FIRMWARE="regulatory.db regulatory.db.p7s"` with `CONFIG_EXTRA_FIRMWARE_DIR` set to where the files are. `cfg80211` is built in and loads it before the root file system is there. The files are not part of this tree, so `k1_defconfig` does not name them.
+- `options brcmfmac roamoff=1` in the root file system's `/etc/modprobe.d`. It switches the firmware's roaming engine off. That engine scans other channels in the background to judge other access points; NebulaOS found the scans to be one cause of failed transmissions while a camera stream runs, and a printer does not move between access points. Connecting and scanning for networks do not depend on it. The driver is mainline's and its default is roaming on, so without this line nothing fails, but the printer's Wi-Fi is not what the checks named above ran with.
 
 [.github/workflows/build.yml](.github/workflows/build.yml) runs this build for every pull request and for every push to `main`. It checks that the tree compiles; it does not run the kernel. To stay cheap it is one job with a compiler cache, and changes to documentation alone do not start it.
 
