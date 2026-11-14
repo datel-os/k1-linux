@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: GPL-2.0
+config MMC_SDHCI_INGENIC
+	tristate "Ingenic(XBurst2)  MMC/SD Card Controller(MSC) support"
+	depends on SOC_X2000
+	select MMC_SDHCI
+	depends on MMC
+	help
+	  This selects the Ingenic XBurst2 SD/MMC Card Controller MSC.
+	  If you have platform with a SD/Multimedia Card slot and compact
+	  with this version, say Y or M here.
+	  If unsure, say N.
