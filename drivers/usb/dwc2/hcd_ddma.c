@@ -887,7 +887,11 @@ static int dwc2_cmpl_host_isoc_dma_desc(struct dwc2_hsotg *hsotg,
 	frame_desc = &qtd->urb->iso_descs[frame_desc_idx];
 	if (idx == qtd->isoc_td_first)
 		usb_urb->start_frame = dwc2_hcd_get_frame_number(hsotg);
-	dma_desc->buf = (u32)(qtd->urb->dma + frame_desc->offset);
+	/*
+	 * Nothing is written to the descriptor here. Its cache line holds
+	 * other descriptors, which the controller may be working on: a line
+	 * made dirty goes back to memory as it was read, with them in it.
+	 */
 	if (chan->ep_is_in)
 		remain = (dma_desc->status & HOST_DMA_ISOC_NBYTES_MASK) >>
 			 HOST_DMA_ISOC_NBYTES_SHIFT;
