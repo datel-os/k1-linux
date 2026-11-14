@@ -20,7 +20,7 @@ Mainline has drivers for some of the X2000 (pin control, USB, SPI, Ethernet) but
 | Clocks, timer, interrupt controller | carried over; runs on the printer | not yet |
 | Pin control, serial | carried over; runs on the printer | not yet |
 | MMC, DMA, I2C | carried over; MMC runs on the printer (the eMMC, Wi-Fi over SDIO); DMA and I2C start, and nothing on the K1 used them in the test | not yet |
-| USB | transceiver carried over, upstream's `dwc2`; runs on the printer (the hub, the camera) | not yet |
+| USB | transceiver carried over; upstream's `dwc2`, with its descriptor DMA path for isochronous endpoints corrected (the camera's stream stopped for good without that); runs on the printer (the hub, the camera) | not yet |
 | TCU, watchdog, RTC, random number generator | carried over; runs on the printer | not yet |
 | The K1 board: device tree, `k1_defconfig`, Helix codec driver, pstore | device tree cut down from the SDK's, board file written, Helix driver from Datel OS; runs on the printer | not yet |
 
