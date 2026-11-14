@@ -464,7 +464,7 @@ static void dwc2_handle_wakeup_detected_intr(struct dwc2_hsotg *hsotg)
 
 			if (hsotg->params.power_down ==
 			    DWC2_POWER_DOWN_PARAM_NONE && hsotg->bus_suspended &&
-			    !hsotg->params.no_clock_gating)
+			    dwc2_host_suspends_port(hsotg))
 				dwc2_host_exit_clock_gating(hsotg, 1);
 
 			/*

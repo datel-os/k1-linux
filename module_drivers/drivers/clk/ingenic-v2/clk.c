@@ -463,7 +463,7 @@ unsigned long _get_rate(const char *clk_name)
 }
 
 #ifdef CONFIG_PM
-static int ingenic_clk_suspend(void)
+static int ingenic_clk_suspend(void *data)
 {
 	struct ingenic_clock_reg_cache *reg_cache;
 
@@ -473,7 +473,7 @@ static int ingenic_clk_suspend(void)
 	return 0;
 }
 
-static void ingenic_clk_resume(void)
+static void ingenic_clk_resume(void *data)
 {
 	struct ingenic_clock_reg_cache *reg_cache;
 
@@ -482,9 +482,13 @@ static void ingenic_clk_resume(void)
 	                    reg_cache->nr_reg_sleep);
 }
 
-static struct syscore_ops ingenic_clk_syscore_ops = {
+static const struct syscore_ops ingenic_clk_syscore_ops = {
 	.suspend = ingenic_clk_suspend,
 	.resume = ingenic_clk_resume,
+};
+
+static struct syscore ingenic_clk_syscore = {
+	.ops = &ingenic_clk_syscore_ops,
 };
 
 void __init ingenic_clk_sleep_init(void __iomem *reg_base,
@@ -503,7 +507,7 @@ void __init ingenic_clk_sleep_init(void __iomem *reg_base,
 	reg_cache->nr_reg_sleep = nr_reg_sleep;
 
 	if (list_empty(&clock_reg_cache_list)) {
-		register_syscore_ops(&ingenic_clk_syscore_ops);
+		register_syscore(&ingenic_clk_syscore);
 	}
 
 	reg_cache->reg_base = reg_base;

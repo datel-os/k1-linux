@@ -870,7 +870,7 @@ static void sdhci_ingenic_remove(struct platform_device *pdev)
 	platform_set_drvdata(pdev, NULL);
 }
 
-#ifdef CONFIG_PM
+#ifdef CONFIG_PM_SLEEP
 static int sdhci_ingenic_suspend(struct device *dev)
 {
 	struct sdhci_host *host = dev_get_drvdata(dev);

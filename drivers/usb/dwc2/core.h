@@ -366,6 +366,13 @@ enum dwc2_ep0_state {
  * @no_clock_gating:	Specifies whether to avoid clock gating feature.
  *			0 - No (use clock gating)
  *			1 - Yes (avoid it)
+ * @ungated_port_suspend: With no_clock_gating, a host still suspends its
+ *			port when the hub asks for it, and leaves the clocks
+ *			running (PCGCTL is not written). Without it such a
+ *			host does not suspend the port at all and goes on
+ *			sending start-of-frame packets.
+ *			0 - No (default)
+ *			1 - Yes
  * @lpm:		Enable LPM support.
  *			0 - No
  *			1 - Yes
@@ -465,6 +472,7 @@ struct dwc2_core_params {
 #define DWC2_POWER_DOWN_PARAM_PARTIAL		1
 #define DWC2_POWER_DOWN_PARAM_HIBERNATION	2
 	bool no_clock_gating;
+	bool ungated_port_suspend;
 
 	bool lpm;
 	bool lpm_clock_gating;
@@ -1497,6 +1505,19 @@ static inline int dwc2_gadget_restore_critical_registers(struct dwc2_hsotg *hsot
 { return 0; }
 static inline void dwc2_clear_fifo_map(struct dwc2_hsotg *hsotg) {}
 #endif
+
+/*
+ * With no power-down mode a host suspends and resumes its port in the clock
+ * gating flow, dwc2_host_enter_clock_gating() and
+ * dwc2_host_exit_clock_gating(). Where the platform forbids gating, the flow
+ * is used only if the platform asks for it (ungated_port_suspend), and then
+ * leaves the clocks alone.
+ */
+static inline bool dwc2_host_suspends_port(struct dwc2_hsotg *hsotg)
+{
+	return !hsotg->params.no_clock_gating ||
+	       hsotg->params.ungated_port_suspend;
+}
 
 #if IS_ENABLED(CONFIG_USB_DWC2_HOST) || IS_ENABLED(CONFIG_USB_DWC2_DUAL_ROLE)
 int dwc2_hcd_get_frame_number(struct dwc2_hsotg *hsotg);
