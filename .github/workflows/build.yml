@@ -1,0 +1,108 @@
+# SPDX-License-Identifier: GPL-2.0
+#
+# Build check: cross-compiles the kernel for MIPS, little endian, for every
+# pull request and for every push to main. It answers one question, "does the
+# tree still compile", with the distribution's cross compiler; the kernel that
+# goes on the printer is built with the Datel OS toolchain, and nothing here
+# is run or published.
+#
+# The configuration is k1_defconfig as soon as that file exists. Until then it
+# is upstream's cu1830-neo_defconfig, the closest relative in the tree
+# (Ingenic X1830, little endian).
+#
+# The repository is private, so the minutes are limited: one job, a compiler
+# cache that lets a later run compile only what changed, runs for a superseded
+# push cancelled, and none at all for changes to documentation alone.
+name: build
+
+on:
+  pull_request:
+    paths-ignore:
+      - "**.md"
+      - "Documentation/**"
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "Documentation/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  ARCH: mips
+  CROSS_COMPILE: mipsel-linux-gnu-
+  CCACHE_MAXSIZE: 500M
+  # The same input gives the same objects, so the cache hits.
+  KBUILD_BUILD_TIMESTAMP: "Thu Jan  1 00:00:00 UTC 1970"
+  KBUILD_BUILD_USER: ci
+  KBUILD_BUILD_HOST: github
+
+jobs:
+  kernel:
+    name: mipsel kernel
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Cross compiler and build tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            gcc-mipsel-linux-gnu bc bison flex libssl-dev ccache u-boot-tools
+
+      # A cache entry cannot be overwritten, so every run saves its own and
+      # restores the newest one it may read: its own branch's, else main's.
+      - name: Compiler cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ccache
+          key: ccache-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ccache-
+
+      - name: Configure
+        run: |
+          if [ -f arch/mips/configs/k1_defconfig ]; then
+            config=k1_defconfig
+          else
+            config=cu1830-neo_defconfig
+          fi
+          echo "CONFIG_NAME=$config" >> "$GITHUB_ENV"
+          make O=build "$config"
+
+      - name: Build
+        run: |
+          ccache --zero-stats > /dev/null
+          make O=build -j"$(nproc)" CC="ccache ${CROSS_COMPILE}gcc" 2>&1 | tee build.log
+
+      - name: First errors
+        if: failure()
+        run: |
+          [ -f build.log ] && grep -n -m 20 -E "error:|Error [0-9]+|undefined reference" build.log || true
+
+      - name: Summary
+        run: |
+          {
+            echo "### $CONFIG_NAME, $(${CROSS_COMPILE}gcc --version | head -n 1)"
+            echo
+            echo "Compiler warnings: $(grep -c "warning:" build.log || true)"
+            echo
+            echo '```'
+            ls -l build/vmlinux
+            find build/arch/mips/boot -maxdepth 2 -type f \
+              \( -name "*Image*" -o -name "vmlinu[xz]*" -o -name "*.dtb" \) \
+              ! -name "*.o" ! -name ".*" -exec ls -l {} +
+            echo
+            ccache --show-stats | grep -E "Hits|Misses|Cache size"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
