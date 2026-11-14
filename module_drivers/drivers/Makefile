@@ -2,7 +2,6 @@
 obj-y += char/
 obj-y += clk/
 obj-y += clocksource/
-obj-y += dma/
 obj-y += i2c/
 obj-y += mfd/
 obj-y += mmc/
