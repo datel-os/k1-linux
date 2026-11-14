@@ -171,10 +171,37 @@ static void jz_wdt_restart(char *command)
 	}
 }
 
+/*
+ * Why the SoC last reset, said once at boot. CPM's reset status register has a
+ * bit for the reset pin (0, also what a power-on leaves), one for the watchdog
+ * (1) and one for the P0 reset (2). Every restart this file does goes through
+ * the watchdog as well, and leaves REBOOT_SIGNATURE in the scratch word; a
+ * watchdog that fired on its own does not. Both are cleared, so that the next
+ * boot reads only what this one ends with.
+ */
+static void __init reset_report_cause(void)
+{
+	unsigned int rsr = cpm_inl(CPM_RSR);
+	unsigned int cppsr = cpm_inl(CPM_CPPSR);
+
+	cpm_outl(0, CPM_RSR);
+	cpm_outl(0x5a5a, CPM_CPSPPR);
+	cpm_outl(0, CPM_CPPSR);
+	cpm_outl(0x0, CPM_CPSPPR);
+
+	pr_info("x2000: reset status RSR=0x%08x%s%s%s CPPSR=0x%08x\n", rsr,
+		(rsr & BIT(0)) ? " power-on" : "",
+		!(rsr & BIT(1)) ? "" :
+			cppsr == REBOOT_SIGNATURE ? " restart" : " watchdog",
+		(rsr & BIT(2)) ? " p0-reset" : "",
+		cppsr);
+}
+
 static int __init reset_init(void)
 {
 	pm_power_off = jz_hibernate;
 	_machine_restart = jz_wdt_restart;
+	reset_report_cause();
 	return 0;
 }
 arch_initcall(reset_init);
