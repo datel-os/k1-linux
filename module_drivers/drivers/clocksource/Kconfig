@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: GPL-2.0
+config CLKSRC_INGENIC_CORE_OST
+	bool "Core OST clocksource."
+	select TIMER_OF
+	depends on SOC_X2000
+	help
+	  core sys ost for ingenic xburst2 based SOCs. each cpu has
+	  an ost and all cpu shares a global clocksource.

@@ -89,8 +89,6 @@ struct xburst2_smp {
 	struct xburst2_mailbox *__percpu *percpu_mailbox;
 };
 static struct xburst2_smp smp_core;
-void ingenic_percpu_timerevent_init(unsigned int cpu_num);
-void ingenic_percpu_irq_init(unsigned int cpu_num);
 
 static irqreturn_t xburst2_mbox_interrupt(int irq, void *data)
 {
@@ -380,8 +378,6 @@ static void xburst2_send_ipi_mask(const struct cpumask *mask, unsigned int actio
 }
 #ifdef CONFIG_HOTPLUG_CPU
 
-void ingenic_percpu_timerevent_deinit(void);
-void ingenic_percpu_irq_deinit(void);
 static int xburst2_cpu_disable(void)
 {
 	unsigned int cpu = smp_processor_id();

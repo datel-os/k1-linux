@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-2.0
+config IRQ_INGENIC_CPU
+	bool "cpu interrupt driver"
+	depends on SOC_X2000
+	select IRQ_DOMAIN
+	help
+	  Support for ingenic cpu core irq handler.
+
+config INGENIC_INTC_CHIP
+	bool "intc v2 interrupt driver"
+	depends on IRQ_INGENIC_CPU
+	select IRQ_DOMAIN
+	help
+	  Support for ingenic XBURST2 based SOCs, which intc is
+	  near cpu core,and each logic cpu has an intc.

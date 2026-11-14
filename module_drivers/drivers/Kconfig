@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: GPL-2.0
+menu "[Interrupt] Drivers"
+source "module_drivers/drivers/irqchip/Kconfig"
+endmenu
+
+menu "[OST] clocksoure Drivers"
+source "module_drivers/drivers/clocksource/Kconfig"
+endmenu
+
+menu "[CPM] clk Drivers"
+source "module_drivers/drivers/clk/ingenic-v2/Kconfig"
+endmenu
