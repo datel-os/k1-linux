@@ -2,7 +2,7 @@
 
 The kernel of [Datel OS](https://github.com/zales/datel-os) for the Creality K1 3D printer, whose mainboard carries an Ingenic X2000: two XBurst2 MIPS32 cores and 256 MB of RAM. It is kernel.org's stable Linux 6.18 plus the support the board needs, added through pull requests.
 
-**State:** phase A runs on the printer. On 14 November 2026 a kernel built from this tree (`k1_defconfig`, the board's device tree built in) booted a K1 and passed phase A's checks, a test print excepted: both CPU cores at 816 MHz, Klipper with its three microcontrollers, Wi-Fi, the camera over WebRTC, the Helix codec's tests, 25 minutes of floating-point work on a hot printer without a wrong result, and a restart by the watchdog with the kernel log kept in pstore. Datel OS ships Ingenic's SDK kernel 6.6 until phase A below is complete.
+**State:** phase A is complete. On 14 November 2026 a kernel built from this tree (`k1_defconfig`, the board's device tree built in) booted a K1 and passed phase A's checks: both CPU cores at 816 MHz, Klipper with its three microcontrollers, Wi-Fi, the camera over WebRTC, the Helix codec's tests, 25 minutes of floating-point work on a hot printer without a wrong result, a restart by the watchdog with the kernel log kept in pstore, and a print of 68 minutes with the camera streaming to two viewers. Datel OS up to 0.5.1 ships Ingenic's SDK kernel 6.6.
 
 The kernel's own introduction is in [README](README).
 
