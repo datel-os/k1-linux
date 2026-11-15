@@ -15,10 +15,6 @@ menu "[GPIO] Pinctroller Drivers"
 source "module_drivers/drivers/pinctrl/Kconfig"
 endmenu
 
-menu "[UART] Drivers"
-source "module_drivers/drivers/tty/serial/Kconfig"
-endmenu
-
 menu "[MSC] (eMMC/SD/SDIO) and Device Drivers"
 source "module_drivers/drivers/mmc/host/Kconfig"
 endmenu

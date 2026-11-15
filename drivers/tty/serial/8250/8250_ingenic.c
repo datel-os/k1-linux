@@ -24,6 +24,7 @@
 struct ingenic_uart_config {
 	int tx_loadsz;
 	int fifosize;
+	bool bit_time;
 };
 
 struct ingenic_uart_data {
@@ -38,6 +39,16 @@ static const struct of_device_id of_match[];
 
 #define UART_MCR_MDCE	BIT(7)
 #define UART_MCR_FCM	BIT(6)
+
+/*
+ * Two registers the 16550 does not have. A bit lasts UMR cycles of the divided
+ * clock: 16 after reset, as in the 16550, and anything from 4 to 31. UACR
+ * names the bits of a frame that last one cycle more.
+ */
+#define UART_UMR	9
+#define UART_UACR	10
+#define UART_UMR_MIN	4
+#define UART_UMR_MAX	31
 
 static struct earlycon_device *early_device;
 
@@ -228,6 +239,60 @@ static u32 ingenic_uart_serial_in(struct uart_port *p, unsigned int offset)
 	return value;
 }
 
+/*
+ * With 16 cycles to a bit the X2000's 24 MHz gives 214,286 or 250,000 baud for
+ * 230,400, which no receiver takes. With 13 cycles and a divisor of 8 it gives
+ * 230,769, which is 0.16 % off. Try every cycle count the port can do, take
+ * the pair that comes closest to the rate and, among equals, the count nearest
+ * to the 16550's 16. The count travels to set_divisor() as the fraction.
+ */
+static unsigned int ingenic_uart_get_divisor(struct uart_port *p,
+					     unsigned int baud,
+					     unsigned int *frac)
+{
+	unsigned int best_quot = 0, best_cycles = 16, cycles;
+	u64 best_err = U64_MAX;
+
+	for (cycles = UART_UMR_MIN; cycles <= UART_UMR_MAX; cycles++) {
+		unsigned int quot = DIV_ROUND_CLOSEST(p->uartclk, baud * cycles);
+		u64 err;
+
+		if (!quot || quot > UART_DIV_MAX)
+			continue;
+
+		/* in thousandths of a baud */
+		err = abs_diff(DIV_ROUND_CLOSEST_ULL(p->uartclk * 1000ULL,
+						     quot * cycles),
+			       baud * 1000ULL);
+		if (err < best_err ||
+		    (err == best_err &&
+		     abs_diff(cycles, 16U) < abs_diff(best_cycles, 16U))) {
+			best_err = err;
+			best_quot = quot;
+			best_cycles = cycles;
+		}
+	}
+
+	if (!best_quot) {
+		best_quot = uart_get_divisor(p, baud);
+		best_cycles = 16;
+	}
+
+	*frac = best_cycles;
+
+	return best_quot;
+}
+
+static void ingenic_uart_set_divisor(struct uart_port *p, unsigned int baud,
+				     unsigned int quot, unsigned int quot_frac)
+{
+	/* UACR is wider than the byte that serial_out() writes. */
+	writel(quot_frac, p->membase + (UART_UMR << p->regshift));
+	writel(0, p->membase + (UART_UACR << p->regshift));
+
+	serial8250_do_set_divisor(p, baud, quot);
+}
+
 static int ingenic_uart_probe(struct platform_device *pdev)
 {
 	struct uart_8250_port uart = {};
@@ -268,6 +333,10 @@ static int ingenic_uart_probe(struct platform_device *pdev)
 
 	uart.port.regshift = 2;
 	uart.port.fifosize = cdata->fifosize;
+	if (cdata->bit_time) {
+		uart.port.get_divisor = ingenic_uart_get_divisor;
+		uart.port.set_divisor = ingenic_uart_set_divisor;
+	}
 
 	uart.port.membase = devm_ioremap(&pdev->dev, regs->start,
 					 resource_size(regs));
@@ -343,6 +412,12 @@ static const struct ingenic_uart_config x1000_uart_config = {
 	.fifosize = 64,
 };
 
+static const struct ingenic_uart_config x2000_uart_config = {
+	.tx_loadsz = 32,
+	.fifosize = 64,
+	.bit_time = true,
+};
+
 static const struct of_device_id of_match[] = {
 	{ .compatible = "ingenic,jz4740-uart", .data = &jz4740_uart_config },
 	{ .compatible = "ingenic,jz4750-uart", .data = &jz4760_uart_config },
@@ -351,6 +426,7 @@ static const struct of_device_id of_match[] = {
 	{ .compatible = "ingenic,jz4775-uart", .data = &jz4760_uart_config },
 	{ .compatible = "ingenic,jz4780-uart", .data = &jz4780_uart_config },
 	{ .compatible = "ingenic,x1000-uart", .data = &x1000_uart_config },
+	{ .compatible = "ingenic,x2000-uart", .data = &x2000_uart_config },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, of_match);
