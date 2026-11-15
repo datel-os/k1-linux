@@ -75,7 +75,7 @@
 		regulator-name = "wifi_bt_power";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpa 1 GPIO_ACTIVE_LOW INGENIC_GPIO_NOBIAS>;
+		gpio = <&gpa 1 GPIO_ACTIVE_LOW>;
 		regulator-always-on;
 		regulator-boot-on;
 	};
@@ -107,7 +107,7 @@
 		regulator-name = "usb_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpa 15 GPIO_ACTIVE_HIGH INGENIC_GPIO_NOBIAS>;
+		gpio = <&gpa 15 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -117,7 +117,7 @@
 
 		led-sys {
 			label = "sys-led";
-			gpios = <&gpa 13 GPIO_ACTIVE_LOW INGENIC_GPIO_NOBIAS>;
+			gpios = <&gpa 13 GPIO_ACTIVE_LOW>;
 			default-state = "on";
 		};
 	};
@@ -133,35 +133,105 @@
 	/*
 	 * The supply of two pin banks, as the stock firmware has them: port A
 	 * at 3.3 V, port E at 1.8 V. Port E carries the module's control
-	 * lines and its 32 kHz clock.
+	 * lines and its 32 kHz clock. The platform code reads these two
+	 * (arch/mips/xburst2/soc-x2000/setup.c); the pin control driver's
+	 * binding does not know them.
 	 */
-	ingenic,gpa_voltage = <GPIO_VOLTAGE_3V3>;
-	ingenic,gpe_msc_voltage = <GPIO_VOLTAGE_1V8>;
-};
+	ingenic,gpa-microvolt = <3300000>;
+	ingenic,gpe-msc-microvolt = <1800000>;
 
-&uart1_pin {
 	/*
-	 * TX and RX alone. The SoC's group for this port is PC21 to PC24, with
-	 * RTS and CTS; on this board PC21 switches the panel's supply and PC22
+	 * No node here asks for a pull: the pins keep the pulls the boot
+	 * loader left, as they did under the SDK's driver.
+	 */
+
+	/*
+	 * TX and RX alone (PC23, PC24). The port's RTS and CTS would be PC21
+	 * and PC22; on this board PC21 switches the panel's supply and PC22
 	 * is its backlight.
 	 */
-	uart1_pc_txrx: uart1-pc-txrx {
-		ingenic,pinmux = <&gpc 23 24>;
-		ingenic,pinmux-funcsel = <PINCTL_FUNCTION1>;
+	pins_uart1: uart1 {
+		function = "uart1";
+		groups = "uart1-data";
+	};
+
+	/* PD30, PD31 */
+	pins_uart2: uart2 {
+		function = "uart2";
+		groups = "uart2-data";
+	};
+
+	/* PD2, PD3, and RTS and CTS on PD0, PD1 */
+	pins_uart3: uart3 {
+		function = "uart3";
+		groups = "uart3-data-d", "uart3-hwflow-d";
+	};
+
+	/* PA4, PA5 */
+	pins_uart5: uart5 {
+		function = "uart5";
+		groups = "uart5-data-a";
+	};
+
+	/* PA8, PA9 */
+	pins_uart7: uart7 {
+		function = "uart7";
+		groups = "uart7-data-a";
+	};
+
+	/* PB30, PB31 */
+	pins_uart9: uart9 {
+		function = "uart9";
+		groups = "uart9-data";
+	};
+
+	/* PB22, PB23 */
+	pins_i2c2: i2c2 {
+		function = "i2c2";
+		groups = "i2c2-data-b";
+	};
+
+	/* PC25, PC26 */
+	pins_i2c4: i2c4 {
+		function = "i2c4";
+		groups = "i2c4-data-c";
+	};
+
+	/* PD17 to PD26: clock, command, reset and eight data lines */
+	pins_mmc0: mmc0 {
+		function = "mmc0";
+		groups = "mmc0-1bit", "mmc0-4bit", "mmc0-8bit";
+	};
+
+	/* PD8 to PD13: clock, command and four data lines */
+	pins_mmc1: mmc1 {
+		function = "mmc1";
+		groups = "mmc1-1bit", "mmc1-4bit";
+	};
+
+	/* PE23 as the RTC's 32 kHz clock output, and held low instead */
+	pins_clk32k: clk32k {
+		function = "clk32k";
+		groups = "clk32k";
+	};
+
+	pins_clk32k_low: clk32k-low {
+		pins = "PE23";
+		output-low;
 	};
 };
 
 /* ttyS1: the microcontroller on the print head (GD32F303CBT6) */
 &uart1 {
 	pinctrl-names = "default";
-	pinctrl-0 = <&uart1_pc_txrx>;
+	pinctrl-0 = <&pins_uart1>;
 	status = "okay";
 };
 
 /* ttyS2: the console, on the header J1 */
 &uart2 {
 	pinctrl-names = "default";
-	pinctrl-0 = <&uart2_pd>;
+	pinctrl-0 = <&pins_uart2>;
 	status = "okay";
 };
 
@@ -173,21 +243,21 @@
  */
 &uart3 {
 	pinctrl-names = "default";
-	pinctrl-0 = <&uart3_pd>;
+	pinctrl-0 = <&pins_uart3>;
 	status = "okay";
 };
 
 /* ttyS5: on in the stock firmware; what it is wired to is not known */
 &uart5 {
 	pinctrl-names = "default";
-	pinctrl-0 = <&uart5_pa>;
+	pinctrl-0 = <&pins_uart5>;
 	status = "okay";
 };
 
 /* ttyS7: the mainboard's microcontroller (GD32F303RET6) */
 &uart7 {
 	pinctrl-names = "default";
-	pinctrl-0 = <&uart7_pa>;
+	pinctrl-0 = <&pins_uart7>;
 	status = "okay";
 };
 
@@ -197,7 +267,7 @@
  */
 &uart9 {
 	pinctrl-names = "default";
-	pinctrl-0 = <&uart9_pb>;
+	pinctrl-0 = <&pins_uart9>;
 	status = "okay";
 };
 
@@ -208,7 +278,7 @@
 &i2c2 {
 	clock-frequency = <100000>;
 	pinctrl-names = "default";
-	pinctrl-0 = <&i2c2_pb>;
+	pinctrl-0 = <&pins_i2c2>;
 	status = "okay";
 };
 
@@ -221,7 +291,7 @@
 &i2c4 {
 	clock-frequency = <100000>;
 	pinctrl-names = "default";
-	pinctrl-0 = <&i2c4_pc>;
+	pinctrl-0 = <&pins_i2c4>;
 	status = "okay";
 };
 
@@ -232,7 +302,7 @@
 /* The eMMC */
 &msc0 {
 	pinctrl-names = "default";
-	pinctrl-0 = <&msc0_8bit>;
+	pinctrl-0 = <&pins_mmc0>;
 	bus-width = <8>;
 	max-frequency = <100000000>;
 	cap-mmc-highspeed;
@@ -248,9 +318,9 @@
  */
 &msc1 {
 	pinctrl-names = "default", "enable", "disable";
-	pinctrl-0 = <&msc1_4bit>;
-	pinctrl-1 = <&rtc32k_enable>;
-	pinctrl-2 = <&rtc32k_disable>;
+	pinctrl-0 = <&pins_mmc1>;
+	pinctrl-1 = <&pins_clk32k>;
+	pinctrl-2 = <&pins_clk32k_low>;
 	bus-width = <4>;
 	max-frequency = <100000000>;
 	cap-sd-highspeed;
@@ -260,7 +330,7 @@
 	keep-power-in-suspend;
 	vmmc-supply = <&wifi_bt_power>;
 	ingenic,sdio_clk = <1>;
-	wlan-reg-on-gpios = <&gpe 2 GPIO_ACTIVE_HIGH INGENIC_GPIO_NOBIAS>;
+	wlan-reg-on-gpios = <&gpe 2 GPIO_ACTIVE_HIGH>;
 	status = "okay";
 };
 
