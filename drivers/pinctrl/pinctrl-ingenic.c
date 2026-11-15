@@ -2996,6 +2996,7 @@ static int x2000_mac1_rgmii_pins[] = {
 	0x33, 0x34, 0x36, 0x35, 0x37,
 };
 static int x2000_otg_pins[] = { 0x96, };
+static int x2000_clk32k_pins[] = { 0x97, };
 
 static u8 x2000_cim_8bit_funcs[] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, };
 
@@ -3134,6 +3135,7 @@ static const struct group_desc x2000_groups[] = {
 	INGENIC_PIN_GROUP("mac1-rmii", x2000_mac1_rmii, 3),
 	INGENIC_PIN_GROUP("mac1-rgmii", x2000_mac1_rgmii, 3),
 	INGENIC_PIN_GROUP("otg-vbus", x2000_otg, 0),
+	INGENIC_PIN_GROUP("clk32k", x2000_clk32k, 0),
 };
 
 static const char *x2000_uart0_groups[] = { "uart0-data", "uart0-hwflow", };
@@ -3221,6 +3223,7 @@ static const char *x2000_pwm15_groups[] = { "pwm15", };
 static const char *x2000_mac0_groups[] = { "mac0-rmii", "mac0-rgmii", };
 static const char *x2000_mac1_groups[] = { "mac1-rmii", "mac1-rgmii", };
 static const char *x2000_otg_groups[] = { "otg-vbus", };
+static const char *x2000_clk32k_groups[] = { "clk32k", };
 
 static const struct pinfunction x2000_functions[] = {
 	INGENIC_PIN_FUNCTION("uart0", x2000_uart0),
@@ -3273,6 +3276,7 @@ static const struct pinfunction x2000_functions[] = {
 	INGENIC_PIN_FUNCTION("mac0", x2000_mac0),
 	INGENIC_PIN_FUNCTION("mac1", x2000_mac1),
 	INGENIC_PIN_FUNCTION("otg", x2000_otg),
+	INGENIC_PIN_FUNCTION("clk32k", x2000_clk32k),
 };
 
 static const struct regmap_range x2000_access_ranges[] = {
