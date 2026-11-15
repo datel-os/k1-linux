@@ -6,7 +6,3 @@ endmenu
 menu "[OST] clocksoure Drivers"
 source "module_drivers/drivers/clocksource/Kconfig"
 endmenu
-
-menu "[CPM] clk Drivers"
-source "module_drivers/drivers/clk/ingenic-v2/Kconfig"
-endmenu
