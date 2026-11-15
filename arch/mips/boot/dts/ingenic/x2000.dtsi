@@ -426,12 +426,16 @@
 		#size-cells = <1>;
 		ranges = <>;
 
-		msc0: msc@13450000 {
-			compatible = "ingenic,sdhci";
+		msc0: mmc@13450000 {
+			compatible = "ingenic,x2000-dwcmshc";
 			reg = <0x13450000 0x10000>;
-			status = "disabled";
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_MSC0>;
+			clocks = <&clock CLK_DIV_MSC0>, <&clock CLK_GATE_MSC0>,
+				 <&clock CLK_EXT>, <&clock CLK_PLL_MPLL>;
+			clock-names = "core", "bus", "ext", "pll";
+			ingenic,cgu = <&clock 0x68>;
+			status = "disabled";
 		};
 
 		msc1: mmc@13460000 {
@@ -446,12 +450,16 @@
 			status = "disabled";
 		};
 
-		msc2: msc@13490000 {
-			compatible = "ingenic,sdhci";
+		msc2: mmc@13490000 {
+			compatible = "ingenic,x2000-dwcmshc";
 			reg = <0x13490000 0x10000>;
-			status = "disabled";
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_MSC2>;
+			clocks = <&clock CLK_DIV_MSC2>, <&clock CLK_GATE_MSC2>,
+				 <&clock CLK_EXT>, <&clock CLK_PLL_MPLL>;
+			clock-names = "core", "bus", "ext", "pll";
+			ingenic,cgu = <&clock 0xa8>;
+			status = "disabled";
 		};
 
 		otg: otg@13500000 {
