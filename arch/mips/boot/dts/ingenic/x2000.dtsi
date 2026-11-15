@@ -3,9 +3,8 @@
  * Ingenic X2000.
  *
  * From the SDK kernel 6.6 (module_drivers/dts/x2000/x2000.dtsi), cut down to
- * the blocks this tree has a driver for. The timer is still in the binding
- * of the SDK's driver (module_drivers/); the other nodes are in upstream's
- * or, where upstream has none, in the binding of this tree's driver.
+ * the blocks this tree has a driver for. The nodes are in upstream's
+ * bindings or, where upstream has none, in the binding of this tree's driver.
  */
 
 #include <dt-bindings/interrupt-controller/x2000-irq.h>
