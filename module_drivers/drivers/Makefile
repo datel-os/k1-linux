@@ -2,5 +2,4 @@
 obj-y += clk/
 obj-y += clocksource/
 obj-y += mmc/
-obj-y += rtc/
 obj-y += irqchip/
