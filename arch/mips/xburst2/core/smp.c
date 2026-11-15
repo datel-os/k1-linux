@@ -133,7 +133,6 @@ static void xburst2_init_secondary(void)
 	int cpu = smp_processor_id();
 	unsigned int mb_msk = get_ccu_mimr();
 	unsigned int pmsk = get_ccu_pimr();
-	unsigned int cpu_num = read_c0_ebase() & 0x1ff;
 	//  unsigned int imask = STATUSF_IP4 | STATUSF_IP3 | STATUSF_IP2;
 	//  int ret;
 	if (cpu == 0) {
@@ -154,7 +153,6 @@ static void xburst2_init_secondary(void)
 	/* jzcpu_timer_setup(); */
 
 	xburst2_ccu_showregs();
-	ingenic_percpu_timerevent_init(cpu_num);
 	set_ccu_oimr((1 << cpu) | get_ccu_oimr());
 
 	/*
@@ -413,7 +411,6 @@ static int xburst2_cpu_disable(void)
 	//val &= ~(1 << cpu);
 	//set_ccu_mimr(val);
 
-	ingenic_percpu_timerevent_deinit();
 	migrate_irqs(cpu);
 	clear_tasks_mm_cpumask(cpu);
 
