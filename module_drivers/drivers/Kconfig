@@ -19,10 +19,6 @@ menu "[MSC] (eMMC/SD/SDIO) and Device Drivers"
 source "module_drivers/drivers/mmc/host/Kconfig"
 endmenu
 
-menu "[I2C] Master Drivers"
-source "module_drivers/drivers/i2c/busses/Kconfig"
-endmenu
-
 menu "[WDT] Drivers"
 source "module_drivers/drivers/watchdog/Kconfig"
 endmenu

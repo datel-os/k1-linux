@@ -206,6 +206,7 @@
  * /dev/i2c-2, and a kernel driver on that address would keep it out.
  */
 &i2c2 {
+	clock-frequency = <100000>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&i2c2_pb>;
 	status = "okay";
@@ -218,6 +219,7 @@
  * nothing would use it without the display.
  */
 &i2c4 {
+	clock-frequency = <100000>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&i2c4_pc>;
 	status = "okay";
