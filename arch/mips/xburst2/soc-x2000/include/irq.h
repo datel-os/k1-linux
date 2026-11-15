@@ -10,7 +10,6 @@
 
 #ifndef __ASM_MACH_INGENIC_IRQ_H__
 #define __ASM_MACH_INGENIC_IRQ_H__
-#include <irq_cpu.h>
 #include <dt-bindings/interrupt-controller/mips-irq.h>
 
 enum {

@@ -479,8 +479,7 @@ config MACH_XBURST2
 	select XBURST2_CPU_SCACHE
 	help
 	  The Ingenic X2000 with the platform code of Ingenic's SDK kernel
-	  (arch/mips/xburst2) and its drivers (module_drivers/), as the
-	  Creality K1 runs it. It does not share code with the "Ingenic SoC
+	  (arch/mips/xburst2), as the Creality K1 runs it. It does not share code with the "Ingenic SoC
 	  based machines" above, which are the upstream drivers for the older
 	  SoCs.
 

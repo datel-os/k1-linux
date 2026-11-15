@@ -1,20 +1,18 @@
 # SPDX-License-Identifier: GPL-2.0
 #
 # Ingenic's SDK platform code for the XBurst2 SoCs, cut down to the X2000.
-# The drivers that go with it are in module_drivers/.
 
 if MACH_XBURST2
 
 # Upstream's pin control driver compiles its X2000 tables in under this symbol
-# and the X2000's clock and interrupt controller drivers are built by default
-# with it. Upstream has no option that sets it: the X2000 has no platform
+# and the X2000's clock, interrupt controller and timer drivers are built by
+# default with it. Upstream has no option that sets it: the X2000 has no platform
 # there.
 config MACH_X2000
 	bool
 
 config SOC_X2000
 	def_bool y
-	select CLKSRC_INGENIC_CORE_OST
 	select MACH_X2000
 	select PINCTRL
 	select PINCTRL_INGENIC
@@ -23,7 +21,5 @@ config SOC_X2000
 config EXTAL_CLOCK
 	int "extal clock in MHz"
 	default 24
-
-source "module_drivers/Kconfig"
 
 endif
