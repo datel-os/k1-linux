@@ -10,7 +10,6 @@
 #include <dt-bindings/interrupt-controller/x2000-irq.h>
 #include <dt-bindings/clock/ingenic-x2000.h>
 #include <dt-bindings/clock/ingenic,tcu.h>
-#include <dt-bindings/gpio/ingenic-gpio.h>
 
 / {
 	#address-cells = <1>;
@@ -161,63 +160,83 @@
 
 		pinctrl: pinctrl@10010000 {
 			compatible = "ingenic,x2000-pinctrl";
-			reg = <0x10010000 0x1000>;
-			ingenic,num-chips = <5>;
-			ingenic,regs-offset = <0x100>;
+			reg = <0x10010000 0x800>;
+			#address-cells = <1>;
+			#size-cells = <0>;
 
-			gpa: gpa {
+			gpa: gpio@0 {
+				compatible = "ingenic,x2000-gpio";
+				reg = <0>;
+
 				gpio-controller;
-				#gpio-cells = <3>;
-				#ingenic,pincfg-cells = <3>;
-				#ingenic,pinmux-cells = <2>;
+				gpio-ranges = <&pinctrl 0 0 32>;
+				#gpio-cells = <2>;
+
+				interrupt-controller;
+				#interrupt-cells = <2>;
+
+				interrupt-parent = <&core_intc>;
 				interrupts = <IRQ_GPIO0>;
-				interrupt-parent = <&core_intc>;
-				interrupt-controller;
-				#interrupt-cells = <2>;
 			};
 
-			gpb: gpb {
+			gpb: gpio@1 {
+				compatible = "ingenic,x2000-gpio";
+				reg = <1>;
+
 				gpio-controller;
-				#gpio-cells = <3>;
-				#ingenic,pincfg-cells = <3>;
-				#ingenic,pinmux-cells = <2>;
+				gpio-ranges = <&pinctrl 0 32 32>;
+				#gpio-cells = <2>;
+
+				interrupt-controller;
+				#interrupt-cells = <2>;
+
+				interrupt-parent = <&core_intc>;
 				interrupts = <IRQ_GPIO1>;
-				interrupt-parent = <&core_intc>;
-				interrupt-controller;
-				#interrupt-cells = <2>;
 			};
 
-			gpc: gpc {
+			gpc: gpio@2 {
+				compatible = "ingenic,x2000-gpio";
+				reg = <2>;
+
 				gpio-controller;
-				#gpio-cells = <3>;
-				#ingenic,pincfg-cells = <3>;
-				#ingenic,pinmux-cells = <2>;
+				gpio-ranges = <&pinctrl 0 64 32>;
+				#gpio-cells = <2>;
+
+				interrupt-controller;
+				#interrupt-cells = <2>;
+
+				interrupt-parent = <&core_intc>;
 				interrupts = <IRQ_GPIO2>;
-				interrupt-parent = <&core_intc>;
-				interrupt-controller;
-				#interrupt-cells = <2>;
 			};
 
-			gpd: gpd {
+			gpd: gpio@3 {
+				compatible = "ingenic,x2000-gpio";
+				reg = <3>;
+
 				gpio-controller;
-				#gpio-cells = <3>;
-				#ingenic,pincfg-cells = <3>;
-				#ingenic,pinmux-cells = <2>;
+				gpio-ranges = <&pinctrl 0 96 32>;
+				#gpio-cells = <2>;
+
+				interrupt-controller;
+				#interrupt-cells = <2>;
+
+				interrupt-parent = <&core_intc>;
 				interrupts = <IRQ_GPIO3>;
-				interrupt-parent = <&core_intc>;
-				interrupt-controller;
-				#interrupt-cells = <2>;
 			};
 
-			gpe: gpe {
+			gpe: gpio@4 {
+				compatible = "ingenic,x2000-gpio";
+				reg = <4>;
+
 				gpio-controller;
-				#gpio-cells = <3>;
-				#ingenic,pincfg-cells = <3>;
-				#ingenic,pinmux-cells = <2>;
-				interrupts = <IRQ_GPIO4>;
-				interrupt-parent = <&core_intc>;
+				gpio-ranges = <&pinctrl 0 128 32>;
+				#gpio-cells = <2>;
+
 				interrupt-controller;
 				#interrupt-cells = <2>;
+
+				interrupt-parent = <&core_intc>;
+				interrupts = <IRQ_GPIO4>;
 			};
 		};
 
@@ -458,5 +477,3 @@
 		};
 	};
 };
-
-#include "x2000-pinctrl.dtsi"
