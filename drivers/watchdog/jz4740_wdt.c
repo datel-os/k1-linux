@@ -106,8 +106,18 @@ static void jz4740_wdt_program(struct watchdog_device *wdt_dev,
 {
 	struct jz4740_wdt_drvdata *drvdata = watchdog_get_drvdata(wdt_dev);
 	u16 timeout_value = (u16)(drvdata->clk_rate * new_timeout);
-	u32 tdr = timeout_value;
 	unsigned int tcer;
+	u32 tdr;
+
+	/*
+	 * A timeout of zero is the restart. The X2000's counter starts at
+	 * zero, and nothing says that it matches a value of zero before it
+	 * has gone round once; Ingenic's code restarts with a count of two.
+	 * One count is the next tick of the watchdog's clock.
+	 */
+	if (drvdata->version >= ID_X2000 && !timeout_value)
+		timeout_value = 1;
+	tdr = timeout_value;
 
 	regmap_read(drvdata->map, TCU_REG_WDT_TCER, &tcer);
 	regmap_write(drvdata->map, TCU_REG_WDT_TCER, 0);
