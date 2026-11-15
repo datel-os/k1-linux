@@ -1,8 +1,6 @@
 #ifndef _DT_BINDINGS_INTERRUPT_CONTROLLER_X2000_IRQ_H
 #define _DT_BINDINGS_INTERRUPT_CONTROLLER_X2000_IRQ_H
 
-#include <dt-bindings/interrupt-controller/mips-irq.h>
-
 #define IRQ_AUDIO           (0)
 #define IRQ_OTG             (1)
 #define IRQ_RESERVED0_2         (2)
