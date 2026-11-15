@@ -431,6 +431,15 @@ static void __init x2000_clk_init(struct device_node *np)
 	/* Register Powers */
 	ingenic_power_register_gate(ctx, x2000_gate_power, ARRAY_SIZE(x2000_gate_power));
 
+	/*
+	 * Upstream's TCU clock driver finds the parents of its clocks by name:
+	 * "pclk", "rtc" and "ext". "ext" is the crystal here too. The other
+	 * two are this table's "div_apb" and "mux_wdt" (the RTC clock as OPCR
+	 * selects it: the crystal divided by 512, or the 32.768 kHz one).
+	 */
+	clk_register_fixed_factor(NULL, "pclk", "div_apb", 0, 1, 1);
+	clk_register_fixed_factor(NULL, "rtc", "mux_wdt", 0, 1, 1);
+
 	ingenic_clk_of_add_provider(np, ctx);
 
 	ingenic_clk_sleep_init(reg_base, x2000_clk_reg_sleep, x2000_nr_clk_reg_sleep);

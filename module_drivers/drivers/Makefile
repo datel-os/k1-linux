@@ -4,5 +4,4 @@ obj-y += clocksource/
 obj-y += mmc/
 obj-y += pinctrl/
 obj-y += rtc/
-obj-y += watchdog/
 obj-y += irqchip/

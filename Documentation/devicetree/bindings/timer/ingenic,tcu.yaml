@@ -64,6 +64,10 @@ properties:
               - ingenic,jz4760b-tcu
           - const: ingenic,jz4760-tcu
           - const: simple-mfd
+      - items:
+          - const: ingenic,x2000-tcu
+          - const: ingenic,x1000-tcu
+          - const: simple-mfd
 
   reg:
     maxItems: 1
@@ -122,6 +126,7 @@ patternProperties:
           - enum:
               - ingenic,jz4740-watchdog
               - ingenic,jz4780-watchdog
+              - ingenic,x2000-watchdog
           - items:
               - enum:
                   - ingenic,jz4770-watchdog
@@ -138,6 +143,12 @@ patternProperties:
 
       clock-names:
         const: wdt
+
+      interrupts:
+        description:
+          The TCU interrupt that carries the watchdog's early compare match
+          (X2000 only). With it the watchdog offers a pre-timeout.
+        maxItems: 1
 
     required:
       - compatible
