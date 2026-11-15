@@ -1827,12 +1827,11 @@ static inline void cpu_probe_ingenic(struct cpuinfo_mips *c, unsigned int cpu)
 	/* XBurst®2 with MXU3.0 SIMD ISA */
 	case PRID_IMP_XBURST2_R2:
 		/*
-		 * The SDK's platform code tells XBurst®2 from XBurst®1 where
-		 * the two differ: the idle wait, the secondary cache, the TLB
-		 * flush, cache operations on the second CPU.
+		 * XBurst®2 is told from XBurst®1 where the two differ: the
+		 * idle wait, the secondary cache, the TLB flush, cache
+		 * operations on the second CPU.
 		 */
-		c->cputype = IS_ENABLED(CONFIG_MACH_XBURST2) ? CPU_XBURST2 :
-							       CPU_XBURST;
+		c->cputype = CPU_XBURST2;
 		__cpu_name[cpu] = "Ingenic XBurst II";
 		break;
 

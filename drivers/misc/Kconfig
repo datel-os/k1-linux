@@ -7,7 +7,7 @@ menu "Misc devices"
 
 config K1OS_HELIX
 	bool "Helix video codec of the Ingenic X2000 for programs (/dev/helix)"
-	depends on MACH_XBURST2 && OF
+	depends on MACH_X2000 && OF
 	help
 	  Gives programs the power, the interrupt and memory of the Helix
 	  codec (H.264 and JPEG encoder, JPEG decoder); they build the codec's

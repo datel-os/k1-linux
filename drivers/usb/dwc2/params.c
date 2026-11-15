@@ -96,7 +96,7 @@ static void dwc2_set_x2000_params(struct dwc2_hsotg *hsotg)
 	p->activate_ingenic_overcurrent_detection =
 		!device_property_read_bool(hsotg->dev, "disable-over-current");
 
-	if (IS_ENABLED(CONFIG_MACH_XBURST2)) {
+	if (IS_ENABLED(CONFIG_MACH_X2000)) {
 		/* As the SDK's driver for this controller sets it */
 		p->ahbcfg = GAHBCFG_HBSTLEN_INCR16 << GAHBCFG_HBSTLEN_SHIFT;
 		/*

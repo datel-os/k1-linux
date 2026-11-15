@@ -73,7 +73,7 @@ static inline bool r4k_op_needs_ipi(unsigned int type)
 	 * The two CPUs of the XBurst2 are threads of one core and share its
 	 * caches; Ingenic's kernel never sends one of them a cache op.
 	 */
-	if (IS_ENABLED(CONFIG_MACH_XBURST2))
+	if (boot_cpu_type() == CPU_XBURST2)
 		return false;
 
 	/*
@@ -855,7 +855,7 @@ static void r4k_dma_cache_inv(unsigned long addr, unsigned long size)
 		r4k_blast_dcache();
 	} else {
 		R4600_HIT_CACHEOP_WAR_IMPL;
-		if (IS_ENABLED(CONFIG_MACH_XBURST2)) {
+		if (boot_cpu_type() == CPU_XBURST2) {
 			/*
 			 * A buffer that does not start or end on a cache line
 			 * shares those lines with other data. Ingenic's kernel
@@ -1562,7 +1562,7 @@ static void setup_scache(void)
 
 	case CPU_XBURST2:
 		if (IS_ENABLED(CONFIG_XBURST2_CPU_SCACHE))
-			ingenic_sc_init();
+			xburst2_sc_init();
 		return;
 
 	case CPU_CAVIUM_OCTEON3:

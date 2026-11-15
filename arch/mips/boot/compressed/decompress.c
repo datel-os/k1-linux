@@ -84,7 +84,7 @@ void __stack_chk_fail(void)
  */
 static void xburst2_flush_caches(void)
 {
-#ifdef CONFIG_MACH_XBURST2
+#ifdef CONFIG_MACH_X2000
 	unsigned long addr;
 
 	for (addr = CKSEG0; addr < CKSEG0 + 0x8000; addr += 32)
@@ -148,7 +148,7 @@ void decompress_kernel(unsigned long boot_heap_start)
 	}
 
 	/* FIXME: should we flush cache here? */
-	if (IS_ENABLED(CONFIG_MACH_XBURST2))
+	if (IS_ENABLED(CONFIG_MACH_X2000))
 		xburst2_flush_caches();
 	puts("Now, booting the kernel...\n");
 }

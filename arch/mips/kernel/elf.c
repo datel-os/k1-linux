@@ -345,7 +345,7 @@ int mips_elf_read_implies_exec(void *elf_ex, int exstack)
 	 * PT_GNU_STACK headers, as the Creality K1's is, has only ever run
 	 * that way on this SoC.
 	 */
-	if (IS_ENABLED(CONFIG_MACH_XBURST2))
+	if (boot_cpu_type() == CPU_XBURST2)
 		return exstack != EXSTACK_DISABLE_X || !cpu_has_rixi;
 
 	/*
