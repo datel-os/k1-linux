@@ -41,7 +41,7 @@
 #define TTY_BUFFER_PAGE	(((PAGE_SIZE - sizeof(struct tty_buffer)) / 2) & ~TTYB_ALIGN_MASK)
 
 /*
- * On the Creality K1 (MACH_XBURST2) the flip buffer work runs on a queue of
+ * On the Creality K1 (MACH_X2000) the flip buffer work runs on a queue of
  * its own, unbound and at high priority (nice -20), not on system_unbound_wq
  * (nice 0): what a serial port or a pty has received reaches its reader ahead
  * of other load. The printer's microcontrollers are on serial ports, and
@@ -60,7 +60,7 @@ static inline struct workqueue_struct *tty_flip_queue(void)
 
 static int __init tty_flip_wq_init(void)
 {
-	if (!IS_ENABLED(CONFIG_MACH_XBURST2))
+	if (!IS_ENABLED(CONFIG_MACH_X2000))
 		return 0;
 
 	tty_flip_wq = alloc_workqueue("tty_flip",
