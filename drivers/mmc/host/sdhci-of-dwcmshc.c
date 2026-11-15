@@ -1152,7 +1152,6 @@ static void dwcmshc_x2000_set_clock(struct sdhci_host *host, unsigned int clock)
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
 	struct dwcmshc_priv *dwc_priv = sdhci_pltfm_priv(pltfm_host);
 	struct x2000_priv *priv = dwc_priv->priv;
-	struct clk *mux = clk_get_parent(pltfm_host->clk);
 	int err;
 
 	if (!clock) {
@@ -1170,8 +1169,8 @@ static void dwcmshc_x2000_set_clock(struct sdhci_host *host, unsigned int clock)
 	sdhci_writew(host, SDHCI_CLOCK_INT_EN | SDHCI_CLOCK_PLL_EN,
 		     SDHCI_CLOCK_CONTROL);
 
-	err = clk_set_parent(mux, clock > X2000_CRYSTAL_MAX_HZ ? priv->pll :
-								  priv->ext);
+	err = clk_set_parent(pltfm_host->clk,
+			     clock > X2000_CRYSTAL_MAX_HZ ? priv->pll : priv->ext);
 	if (!err)
 		err = clk_set_rate(pltfm_host->clk, clock);
 	if (err)

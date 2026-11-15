@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Ingenic X2000, in the bindings of the SDK's drivers (module_drivers/).
+ * Ingenic X2000.
  *
  * From the SDK kernel 6.6 (module_drivers/dts/x2000/x2000.dtsi), cut down to
- * the blocks this tree has a driver for. The USB controller is the one node
- * in the binding of an upstream driver (dwc2).
+ * the blocks this tree has a driver for. The CPU's interrupt lines, the
+ * interrupt controller and the timer are still in the bindings of the SDK's
+ * drivers (module_drivers/); the other nodes are in upstream's.
  */
 
 #include <dt-bindings/interrupt-controller/x2000-irq.h>
-#include <dt-bindings/clock/ingenic-x2000.h>
+#include <dt-bindings/clock/ingenic,x2000-cgu.h>
 #include <dt-bindings/clock/ingenic,tcu.h>
 
 / {
@@ -87,16 +88,14 @@
 				<1 0x100>;
 	};
 
-	extclk: extclk {
-		compatible = "ingenic,fixed-clock";
-		clock-output-names ="ext";
+	/* the crystal; a board says its frequency */
+	exclk: ext {
+		compatible = "fixed-clock";
 		#clock-cells = <0>;
-		clock-frequency  = <24000000>;
 	};
 
-	rtcclk: rtcclk {
-		compatible = "ingenic,fixed-clock";
-		clock-output-names ="rtc_ext";
+	rtclk: osc32k {
+		compatible = "fixed-clock";
 		#clock-cells = <0>;
 		clock-frequency = <32768>;
 	};
@@ -107,13 +106,12 @@
 		#size-cells = <1>;
 		ranges = <>;
 
-		clock: clock-controller@10000000 {
-			compatible = "ingenic,x2000-clocks";
+		cgu: clock-controller@10000000 {
+			compatible = "ingenic,x2000-cgu";
 			reg = <0x10000000 0x100>;
-			clocks = <&extclk>, <&rtcclk>;
-			clock-names = "ext", "rtc_ext";
+			clocks = <&exclk>, <&rtclk>;
+			clock-names = "ext", "osc32k";
 			#clock-cells = <1>;
-			little-endian;
 		};
 
 		tcu: timer@10002000 {
@@ -125,8 +123,8 @@
 
 			#clock-cells = <1>;
 
-			clocks = <&clock CLK_MUX_WDT>, <&clock CLK_EXT>,
-				 <&clock CLK_DIV_APB>, <&clock CLK_GATE_TCU>;
+			clocks = <&cgu X2000_CLK_ERCS>, <&cgu X2000_CLK_EXCLK>,
+				 <&cgu X2000_CLK_PCLK>, <&cgu X2000_CLK_TCU>;
 			clock-names = "rtc", "ext", "pclk", "tcu";
 
 			interrupt-controller;
@@ -159,7 +157,7 @@
 			reg = <0x10003000 0x4c>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_RTC>;
-			clocks = <&clock CLK_GATE_RTC>;
+			clocks = <&cgu X2000_CLK_RTC>;
 			clock-names = "rtc";
 		};
 
@@ -250,7 +248,7 @@
 			reg = <0x10030000 0x100>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_UART0>;
-			clocks = <&clock CLK_EXT>, <&clock CLK_GATE_UART0>;
+			clocks = <&cgu X2000_CLK_EXCLK>, <&cgu X2000_CLK_UART0>;
 			clock-names = "baud", "module";
 			status = "disabled";
 		};
@@ -259,7 +257,7 @@
 			reg = <0x10031000 0x100>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_UART1>;
-			clocks = <&clock CLK_EXT>, <&clock CLK_GATE_UART1>;
+			clocks = <&cgu X2000_CLK_EXCLK>, <&cgu X2000_CLK_UART1>;
 			clock-names = "baud", "module";
 			status = "disabled";
 		};
@@ -268,7 +266,7 @@
 			reg = <0x10032000 0x100>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_UART2>;
-			clocks = <&clock CLK_EXT>, <&clock CLK_GATE_UART2>;
+			clocks = <&cgu X2000_CLK_EXCLK>, <&cgu X2000_CLK_UART2>;
 			clock-names = "baud", "module";
 			status = "disabled";
 		};
@@ -277,7 +275,7 @@
 			reg = <0x10033000 0x100>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_UART3>;
-			clocks = <&clock CLK_EXT>, <&clock CLK_GATE_UART3>;
+			clocks = <&cgu X2000_CLK_EXCLK>, <&cgu X2000_CLK_UART3>;
 			clock-names = "baud", "module";
 			status = "disabled";
 		};
@@ -287,7 +285,7 @@
 			reg = <0x10034000 0x100>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_UART4>;
-			clocks = <&clock CLK_EXT>, <&clock CLK_GATE_UART4>;
+			clocks = <&cgu X2000_CLK_EXCLK>, <&cgu X2000_CLK_UART4>;
 			clock-names = "baud", "module";
 			status = "disabled";
 		};
@@ -296,7 +294,7 @@
 			reg = <0x10035000 0x100>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_UART5>;
-			clocks = <&clock CLK_EXT>, <&clock CLK_GATE_UART5>;
+			clocks = <&cgu X2000_CLK_EXCLK>, <&cgu X2000_CLK_UART5>;
 			clock-names = "baud", "module";
 			status = "disabled";
 		};
@@ -305,7 +303,7 @@
 			reg = <0x10036000 0x100>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_UART6>;
-			clocks = <&clock CLK_EXT>, <&clock CLK_GATE_UART6>;
+			clocks = <&cgu X2000_CLK_EXCLK>, <&cgu X2000_CLK_UART6>;
 			clock-names = "baud", "module";
 			status = "disabled";
 		};
@@ -314,7 +312,7 @@
 			reg = <0x10037000 0x100>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_UART7>;
-			clocks = <&clock CLK_EXT>, <&clock CLK_GATE_UART7>;
+			clocks = <&cgu X2000_CLK_EXCLK>, <&cgu X2000_CLK_UART7>;
 			clock-names = "baud", "module";
 			status = "disabled";
 		};
@@ -324,7 +322,7 @@
 			reg = <0x10038000 0x100>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_UART8>;
-			clocks = <&clock CLK_EXT>, <&clock CLK_GATE_UART8>;
+			clocks = <&cgu X2000_CLK_EXCLK>, <&cgu X2000_CLK_UART8>;
 			clock-names = "baud", "module";
 			status = "disabled";
 		};
@@ -333,7 +331,7 @@
 			reg = <0x10039000 0x100>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_UART9>;
-			clocks = <&clock CLK_EXT>, <&clock CLK_GATE_UART9>;
+			clocks = <&cgu X2000_CLK_EXCLK>, <&cgu X2000_CLK_UART9>;
 			clock-names = "baud", "module";
 			status = "disabled";
 		};
@@ -343,7 +341,7 @@
 			reg = <0x10050000 0x1000>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_I2C0>;
-			clocks = <&clock CLK_GATE_SMB0>;
+			clocks = <&cgu X2000_CLK_I2C0>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 			status = "disabled";
@@ -354,7 +352,7 @@
 			reg = <0x10051000 0x1000>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_I2C1>;
-			clocks = <&clock CLK_GATE_SMB1>;
+			clocks = <&cgu X2000_CLK_I2C1>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 			status = "disabled";
@@ -365,7 +363,7 @@
 			reg = <0x10052000 0x1000>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_I2C2>;
-			clocks = <&clock CLK_GATE_SMB2>;
+			clocks = <&cgu X2000_CLK_I2C2>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 			status = "disabled";
@@ -376,7 +374,7 @@
 			reg = <0x10053000 0x1000>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_I2C3>;
-			clocks = <&clock CLK_GATE_SMB3>;
+			clocks = <&cgu X2000_CLK_I2C3>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 			status = "disabled";
@@ -387,7 +385,7 @@
 			reg = <0x10054000 0x1000>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_I2C4>;
-			clocks = <&clock CLK_GATE_SMB4>;
+			clocks = <&cgu X2000_CLK_I2C4>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 			status = "disabled";
@@ -398,7 +396,7 @@
 			reg = <0x10055000 0x1000>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_I2C5>;
-			clocks = <&clock CLK_GATE_SMB5>;
+			clocks = <&cgu X2000_CLK_I2C5>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 			status = "disabled";
@@ -407,14 +405,14 @@
 		dtrng: trng@10072000 {
 			compatible = "ingenic,x2000-dtrng";
 			reg = <0x10072000 0xc>;
-			clocks = <&clock CLK_GATE_DTRNG>;
+			clocks = <&cgu X2000_CLK_DTRNG>;
 			status = "disabled";
 		};
 
 		otg_phy: usb-phy@1000003c {
 			compatible = "ingenic,x2000-phy";
 			reg = <0x1000003c 0x10>;
-			clocks = <&clock CLK_OTG_PHY>;
+			clocks = <&cgu X2000_CLK_OTGPHY>;
 			#phy-cells = <0>;
 			status = "disabled";
 		};
@@ -431,10 +429,10 @@
 			reg = <0x13450000 0x10000>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_MSC0>;
-			clocks = <&clock CLK_DIV_MSC0>, <&clock CLK_GATE_MSC0>,
-				 <&clock CLK_EXT>, <&clock CLK_PLL_MPLL>;
-			clock-names = "core", "bus", "ext", "pll";
-			ingenic,cgu = <&clock 0x68>;
+			clocks = <&cgu X2000_CLK_MSC0>, <&cgu X2000_CLK_EXCLK>,
+				 <&cgu X2000_CLK_MPLL>;
+			clock-names = "core", "ext", "pll";
+			ingenic,cgu = <&cgu 0x68>;
 			status = "disabled";
 		};
 
@@ -443,10 +441,10 @@
 			reg = <0x13460000 0x10000>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_MSC1>;
-			clocks = <&clock CLK_DIV_MSC1>, <&clock CLK_GATE_MSC1>,
-				 <&clock CLK_EXT>, <&clock CLK_PLL_MPLL>;
-			clock-names = "core", "bus", "ext", "pll";
-			ingenic,cgu = <&clock 0xa4>;
+			clocks = <&cgu X2000_CLK_MSC1>, <&cgu X2000_CLK_EXCLK>,
+				 <&cgu X2000_CLK_MPLL>;
+			clock-names = "core", "ext", "pll";
+			ingenic,cgu = <&cgu 0xa4>;
 			status = "disabled";
 		};
 
@@ -455,10 +453,10 @@
 			reg = <0x13490000 0x10000>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_MSC2>;
-			clocks = <&clock CLK_DIV_MSC2>, <&clock CLK_GATE_MSC2>,
-				 <&clock CLK_EXT>, <&clock CLK_PLL_MPLL>;
-			clock-names = "core", "bus", "ext", "pll";
-			ingenic,cgu = <&clock 0xa8>;
+			clocks = <&cgu X2000_CLK_MSC2>, <&cgu X2000_CLK_EXCLK>,
+				 <&cgu X2000_CLK_MPLL>;
+			clock-names = "core", "ext", "pll";
+			ingenic,cgu = <&cgu 0xa8>;
 			status = "disabled";
 		};
 
@@ -467,7 +465,7 @@
 			reg = <0x13500000 0x40000>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_OTG>;
-			clocks = <&clock CLK_GATE_OTG>;
+			clocks = <&cgu X2000_CLK_OTG>;
 			clock-names = "otg";
 			phys = <&otg_phy>;
 			phy-names = "usb2-phy";
@@ -490,6 +488,9 @@
 			reg = <0x13200000 0x100000>;
 			interrupt-parent = <&core_intc>;
 			interrupts = <IRQ_HELIX>;
+			/* the codec's power switch, behind its clock gate */
+			clocks = <&cgu X2000_CLK_HELIX_PWR>;
+			clock-names = "power_helix";
 			status = "disabled";
 		};
 	};

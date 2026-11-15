@@ -115,14 +115,12 @@ allOf:
         properties:
           clocks:
             items:
-              - description: core clock, the clock unit's divider for the host
-              - description: bus clock, the gate behind the divider
-              - description: the crystal, the divider's source at 400 kHz and below
-              - description: the PLL, the divider's source above that
+              - description: core clock, the clock unit's clock for the host
+              - description: the crystal, that clock's source at 400 kHz and below
+              - description: the PLL, its source above that
           clock-names:
             items:
               - const: core
-              - const: bus
               - const: ext
               - const: pll
         required:

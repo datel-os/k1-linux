@@ -570,13 +570,13 @@ static int __init ingenic_ost_init(struct device_node *np)
 	core_ost->iobase = core_iobase;
 	core_ost->irq = irq;
 
-	tmr->clk_gate = clk_get(NULL, "gate_ost");
+	tmr->clk_gate = clk_get(NULL, "ost");
 	if (IS_ERR_OR_NULL(tmr->clk_gate)) {
 		pr_err("Failed to get global ost clk gate!\n");
 		tmr->clk_gate = NULL;
 	}
 
-	core_ost->core_gate = clk_get(NULL, "gate_ost");
+	core_ost->core_gate = clk_get(NULL, "ost");
 	if (IS_ERR_OR_NULL(core_ost->core_gate)) {
 		pr_err("Failed to get core ost clk gate!\n");
 		core_ost->core_gate = NULL;

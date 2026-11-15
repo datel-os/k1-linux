@@ -5,16 +5,15 @@
 
 if MACH_XBURST2
 
-# Upstream's pin control driver compiles its X2000 tables in under this symbol,
-# and upstream has no option that sets it: the X2000 has no platform there.
+# Upstream's pin control driver compiles its X2000 tables in under this symbol
+# and the X2000's clock driver is built by default with it. Upstream has no
+# option that sets it: the X2000 has no platform there.
 config MACH_X2000
 	bool
 
 config SOC_X2000
 	def_bool y
-	select CLKDEV_LOOKUP
 	select CLKSRC_INGENIC_CORE_OST
-	select CLK_X2000
 	select INGENIC_INTC_CHIP
 	select IRQ_INGENIC_CPU
 	select MACH_X2000

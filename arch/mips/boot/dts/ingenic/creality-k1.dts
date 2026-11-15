@@ -142,6 +142,25 @@
 	 */
 };
 
+&exclk {
+	clock-frequency = <24000000>;
+};
+
+/*
+ * The CPU and its L2 cache run on the APLL, which the boot loader sets to
+ * 1200 MHz. At that speed this board computes wrong floating point results
+ * now and then (a few in a million repetitions of a fixed calculation on one
+ * CPU, a few in a thousand with both CPUs busy), more when it is warm; the
+ * same kernel and the same program give none at 912 MHz and below. Klipper
+ * turns such a result into a step that lies before the previous one and
+ * shuts the printer down. 816 MHz is one step of 96 MHz below the highest
+ * clean rate that was measured.
+ */
+&cgu {
+	assigned-clocks = <&cgu X2000_CLK_APLL>;
+	assigned-clock-rates = <816000000>;
+};
+
 &pinctrl {
 	/*
 	 * The supply of two pin banks, as the stock firmware has them: port A

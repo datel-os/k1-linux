@@ -385,7 +385,7 @@ static int __init ingenic_intc_of_init(struct device_node *node)
 
 	core_irq_setup(irq_chips);
 
-	irq_chips->intc_clk  = clk_get(NULL, "gate_intc");
+	irq_chips->intc_clk  = clk_get(NULL, "intc");
 
 	domain = irq_domain_create_legacy(of_fwnode_handle(node), INTC_NR_IRQS, 8, 0,
 					  &ingenic_irq_domain_ops, chip);
