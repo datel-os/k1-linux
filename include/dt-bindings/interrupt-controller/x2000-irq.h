@@ -1,3 +1,13 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+/*
+ * The interrupt sources of the Ingenic X2000, by their number at the SoC's
+ * interrupt controller.
+ *
+ * From Ingenic's SDK kernel 6.6 (module_drivers/include/dt-bindings/
+ * interrupt-controller/x2000-irq.h), as it is but for an include that went.
+ * It came without a licence line; the SDK kernel is a Linux tree, under
+ * GPL-2.0.
+ */
 #ifndef _DT_BINDINGS_INTERRUPT_CONTROLLER_X2000_IRQ_H
 #define _DT_BINDINGS_INTERRUPT_CONTROLLER_X2000_IRQ_H
 
