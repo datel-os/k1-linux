@@ -19,6 +19,7 @@ properties:
           - ingenic,jz4740-intc
           - ingenic,jz4760-intc
           - ingenic,jz4780-intc
+          - ingenic,x2000-intc
       - items:
           - enum:
               - ingenic,jz4775-intc
@@ -36,7 +37,8 @@ properties:
     const: 1
 
   reg:
-    maxItems: 1
+    minItems: 1
+    maxItems: 2
 
   interrupts:
     maxItems: 1
@@ -50,6 +52,25 @@ required:
   - "#interrupt-cells"
   - interrupt-controller
 
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: ingenic,x2000-intc
+    then:
+      properties:
+        reg:
+          description:
+            The X2000's controller has a block of registers for each CPU,
+            with a mask bit for every interrupt, and an interrupt goes to
+            the CPU it is unmasked at. One entry for each CPU, in the CPUs'
+            order. The CPU's interrupt line is the same on every CPU.
+    else:
+      properties:
+        reg:
+          maxItems: 1
+
 additionalProperties: false
 
 examples:
@@ -57,6 +78,18 @@ examples:
     intc: interrupt-controller@10001000 {
       compatible = "ingenic,jz4770-intc", "ingenic,jz4760-intc";
       reg = <0x10001000 0x40>;
+
+      interrupt-controller;
+      #interrupt-cells = <1>;
+
+      interrupt-parent = <&cpuintc>;
+      interrupts = <2>;
+    };
+
+  - |
+    interrupt-controller@12300000 {
+      compatible = "ingenic,x2000-intc";
+      reg = <0x12300000 0x100>, <0x12300100 0x100>;
 
       interrupt-controller;
       #interrupt-cells = <1>;

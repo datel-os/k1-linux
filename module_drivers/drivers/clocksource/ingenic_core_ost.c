@@ -295,7 +295,8 @@ extern void sysrq_handle_showallcpus(int key);
 extern void sysrq_handle_showlocks(int key);
 static irqreturn_t core_timerevent_interrupt(int irq, void *dev_id)
 {
-	struct core_timerevent *evt_dev =  *(struct core_timerevent **)dev_id;
+	struct core_ost_chip *core_ost = dev_id;
+	struct core_timerevent *evt_dev = *this_cpu_ptr(core_ost->percpu_timerevent);
 	void __iomem *iobase = evt_dev->iobase;
 	int cpu = smp_processor_id();
 	unsigned long flags;
@@ -454,7 +455,6 @@ static void percpu_timerevent_init(struct core_ost_chip *core_ost, int cpu_num)
 
 	*this_cpu_ptr(core_ost->percpu_timerevent) = timerevent;
 
-	enable_percpu_irq(core_ost->irq, IRQ_TYPE_NONE);
 	pr_info("clockevents_config_and_register success.\n");
 }
 void ingenic_percpu_timerevent_init(unsigned int cpu_num)
@@ -466,7 +466,6 @@ EXPORT_SYMBOL_GPL(ingenic_percpu_timerevent_init);
 static void percpu_timerevent_deinit(struct core_ost_chip *core_ost)
 {
 	struct core_timerevent *timerevent = *this_cpu_ptr(core_ost->percpu_timerevent);
-	disable_percpu_irq(core_ost->irq);
 	ost_writel(0, timerevent->iobase + OSTER); //disable ost
 	ost_writel(1, timerevent->iobase + OSTMR);
 }
@@ -478,8 +477,6 @@ EXPORT_SYMBOL_GPL(ingenic_percpu_timerevent_deinit);
 
 static void __init core_ost_setup(struct core_ost_chip *core_ost, unsigned long ext_rate)
 {
-	int ret;
-
 	if (core_ost->core_gate) {
 		clk_prepare_enable(core_ost->core_gate);
 	}
@@ -490,10 +487,6 @@ static void __init core_ost_setup(struct core_ost_chip *core_ost, unsigned long 
 	if (!core_ost->percpu_timerevent) {
 		pr_err("ost percpu alloc fail!\n");
 		return;
-	}
-	ret = request_percpu_irq(core_ost->irq, core_timerevent_interrupt, "core_timerevent", core_ost->percpu_timerevent);
-	if (ret < 0) {
-		pr_err("dddd timer request ost error %d \n", ret);
 	}
 	memset(timerevent_buf, 0, sizeof(timerevent_buf));
 
@@ -584,6 +577,13 @@ static int __init ingenic_ost_init(struct device_node *np)
 
 	core_ost_setup(core_ost, ext_rate);
 	percpu_timerevent_init(core_ost, 0);
+	/*
+	 * One interrupt for all CPUs, requested once the boot CPU's timer is
+	 * there for its handler; a CPU's own mask bit lets it in.
+	 */
+	if (request_irq(core_ost->irq, core_timerevent_interrupt,
+			IRQF_PERCPU | IRQF_TIMER, "core_timerevent", core_ost))
+		pr_err("Failed to request the core ost interrupt\n");
 	core_clocksource_init(core_ost, tmr);
 
 	return 0;

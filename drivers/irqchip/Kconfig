@@ -395,6 +395,18 @@ config INGENIC_IRQ
 	depends on MACH_INGENIC
 	default y
 
+config INGENIC_X2000_IRQ
+	bool "Ingenic X2000 interrupt controller"
+	default MACH_X2000
+	depends on MIPS || COMPILE_TEST
+	select IRQ_DOMAIN
+	help
+	  Support for the interrupt controller of the Ingenic X2000, which
+	  has a set of mask registers for each CPU and gives an interrupt to
+	  the CPU it is unmasked at.
+
+	  If building for a X2000 SoC, you want to say Y here.
+
 config INGENIC_TCU_IRQ
 	bool "Ingenic JZ47xx TCU interrupt controller"
 	default MACH_INGENIC

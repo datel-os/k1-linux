@@ -93,13 +93,18 @@ static struct xburst2_smp smp_core;
 static irqreturn_t xburst2_mbox_interrupt(int irq, void *data)
 {
 	unsigned int action = 0;
-	struct xburst2_mailbox *mailbox = *(struct xburst2_mailbox **)data;
+	struct xburst2_mailbox *mailbox = *this_cpu_ptr(smp_core.percpu_mailbox);
 	raw_spin_lock(&mailbox->lock);
 	action = readl(mailbox->iobase);
 	writel(0, mailbox->iobase);
 	raw_spin_unlock(&mailbox->lock);
+	/*
+	 * No action is not an error. irq-mips-cpu dispatches every line of one
+	 * reading of what is pending; a mailbox interrupt that is served from
+	 * inside an earlier line's softirqs has its handler called once more
+	 * afterwards, with nothing left.
+	 */
 	if (!action) {
-		pr_err("SMP[%d]:invalid mailboxes action is NULL\n", smp_processor_id());
 		goto ipi_finish;
 	}
 	if (action & SMP_CALL_FUNCTION) {
@@ -119,7 +124,6 @@ static void percpu_mailbox_init(int cpu)
 	raw_spin_lock_init(&smp_core.mailbox[cpu].lock);
 	*this_cpu_ptr(smp_core.percpu_mailbox) = &smp_core.mailbox[cpu];
 	writel(0, smp_core.mailbox[cpu].iobase);
-	enable_percpu_irq(CORE_MAILBOX_IRQ, IRQ_TYPE_NONE);
 }
 /*
  * Code to run on secondary just after probing the CPU
@@ -144,7 +148,6 @@ static void xburst2_init_secondary(void)
 	set_ccu_mimr(mb_msk);
 	percpu_mailbox_init(cpu);
 	pr_debug("percpu %x\n", read_c0_status());
-	ingenic_percpu_irq_init(cpu_num);
 	pmsk |= (1 << cpu);
 	set_ccu_pimr(pmsk);
 
@@ -153,6 +156,13 @@ static void xburst2_init_secondary(void)
 	xburst2_ccu_showregs();
 	ingenic_percpu_timerevent_init(cpu_num);
 	set_ccu_oimr((1 << cpu) | get_ccu_oimr());
+
+	/*
+	 * This CPU's lines for the interrupt controller, the mailbox and the
+	 * timer. Each is one interrupt for all CPUs, requested once, and a
+	 * CPU's own mask bit lets it in.
+	 */
+	change_c0_status(ST0_IM, STATUSF_IP2 | STATUSF_IP3 | STATUSF_IP4);
 }
 static bool migrate_one_irq(int cpu, struct irq_desc *desc)
 {
@@ -333,12 +343,13 @@ static void __init xburst2_prepare_cpus(unsigned int max_cpus)
 		pr_err("ERROR:alloc mailbox percpu fail!\n");
 	}
 
-	ret = request_percpu_irq(CORE_MAILBOX_IRQ, xburst2_mbox_interrupt, "jz-mailbox",
-	                         smp_core.percpu_mailbox);
+	percpu_mailbox_init(0);
+	ret = request_irq(CORE_MAILBOX_IRQ, xburst2_mbox_interrupt,
+			  IRQF_PERCPU | IRQF_NO_THREAD | IRQF_NO_SUSPEND,
+			  "jz-mailbox", &smp_core);
 	if (ret) {
 		pr_err("ERROR: cpu%d request ost error\n", smp_processor_id());
 	}
-	percpu_mailbox_init(0);
 	set_ccu_mimr(1 << 0);
 	/* prepare slave cpus entry code */
 	build_bounce_code(&smp_core);
@@ -402,7 +413,6 @@ static int xburst2_cpu_disable(void)
 	//val &= ~(1 << cpu);
 	//set_ccu_mimr(val);
 
-	ingenic_percpu_irq_deinit();
 	ingenic_percpu_timerevent_deinit();
 	migrate_irqs(cpu);
 	clear_tasks_mm_cpumask(cpu);
