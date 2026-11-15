@@ -96,6 +96,8 @@ struct ingenic_cgu_mux_info {
  * @bypass_mask: mask of parent clocks for which the divider does not apply
  * @div_table: optional table to map the value read from the register to the
  *             actual divider value
+ * @ce_clear: clear the change enable bit again once a change is done, for a
+ *            register whose other fields are written apart from the divider
  */
 struct ingenic_cgu_div_info {
 	unsigned reg;
@@ -107,6 +109,7 @@ struct ingenic_cgu_div_info {
 	s8 stop_bit;
 	u8 bypass_mask;
 	const u8 *div_table;
+	bool ce_clear;
 };
 
 /**
