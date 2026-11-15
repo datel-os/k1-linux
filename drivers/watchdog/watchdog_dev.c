@@ -944,9 +944,15 @@ static int watchdog_release(struct inode *inode, struct file *file)
 	struct watchdog_core_data *wd_data = file->private_data;
 	struct watchdog_device *wdd;
 	int err = -EBUSY;
-	bool running;
+	bool running, allowed;
 
 	mutex_lock(&wd_data->lock);
+
+	/*
+	 * The magic character allows this release and no later one: it is
+	 * used up here whether or not there is anything to stop.
+	 */
+	allowed = test_and_clear_bit(_WDOG_ALLOW_RELEASE, &wd_data->status);
 
 	wdd = wd_data->wdd;
 	if (!wdd)
@@ -959,8 +965,7 @@ static int watchdog_release(struct inode *inode, struct file *file)
 	 */
 	if (!watchdog_active(wdd))
 		err = 0;
-	else if (test_and_clear_bit(_WDOG_ALLOW_RELEASE, &wd_data->status) ||
-		 !(wdd->info->options & WDIOF_MAGICCLOSE))
+	else if (allowed || !(wdd->info->options & WDIOF_MAGICCLOSE))
 		err = watchdog_stop(wdd);
 
 	/* If the watchdog was not stopped, send a keepalive ping */
