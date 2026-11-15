@@ -1562,7 +1562,7 @@ static void setup_scache(void)
 
 	case CPU_XBURST2:
 		if (IS_ENABLED(CONFIG_XBURST2_CPU_SCACHE))
-			ingenic_sc_init();
+			xburst2_sc_init();
 		return;
 
 	case CPU_CAVIUM_OCTEON3:
