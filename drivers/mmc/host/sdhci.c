@@ -286,12 +286,6 @@ static void sdhci_reset_for_reason(struct sdhci_host *host, enum sdhci_reset_rea
 	case SDHCI_RESET_FOR_TUNING_ABORT:
 	case SDHCI_RESET_FOR_CARD_REMOVED:
 	case SDHCI_RESET_FOR_CQE_RECOVERY:
-		/* The SDK resets the data line of the Ingenic MSC first */
-		if (IS_ENABLED(CONFIG_MMC_SDHCI_INGENIC)) {
-			sdhci_do_reset(host, SDHCI_RESET_DATA);
-			sdhci_do_reset(host, SDHCI_RESET_CMD);
-			break;
-		}
 		sdhci_do_reset(host, SDHCI_RESET_CMD);
 		sdhci_do_reset(host, SDHCI_RESET_DATA);
 		break;

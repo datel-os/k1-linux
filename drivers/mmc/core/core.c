@@ -2260,14 +2260,7 @@ void mmc_rescan(struct work_struct *work)
 	/* If there is a non-removable card registered, only scan once */
 	if (!mmc_card_is_removable(host) && host->rescan_entered)
 		return;
-	/*
-	 * The SDK's SDHCI glue powers the Wi-Fi chip up after the first scan
-	 * has found nothing and asks for another one
-	 * (ingenic_mmc_manual_detect()). A host that is not removable gets
-	 * that second scan only if the first one is not remembered.
-	 */
-	if (!IS_ENABLED(CONFIG_MMC_SDHCI_INGENIC))
-		host->rescan_entered = 1;
+	host->rescan_entered = 1;
 
 	if (host->trigger_card_event && host->ops->card_event) {
 		mmc_claim_host(host);
@@ -2276,13 +2269,8 @@ void mmc_rescan(struct work_struct *work)
 		host->trigger_card_event = false;
 	}
 
-	/*
-	 * Verify a registered card to be functional, else remove it. With
-	 * scans repeated as above, the SDK leaves a card that is not removable
-	 * alone.
-	 */
-	if (host->bus_ops &&
-	    (mmc_card_is_removable(host) || !IS_ENABLED(CONFIG_MMC_SDHCI_INGENIC)))
+	/* Verify a registered card to be functional, else remove it. */
+	if (host->bus_ops)
 		host->bus_ops->detect(host);
 
 	host->detect_change = 0;

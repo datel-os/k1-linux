@@ -10,7 +10,3 @@ endmenu
 menu "[CPM] clk Drivers"
 source "module_drivers/drivers/clk/ingenic-v2/Kconfig"
 endmenu
-
-menu "[MSC] (eMMC/SD/SDIO) and Device Drivers"
-source "module_drivers/drivers/mmc/host/Kconfig"
-endmenu
