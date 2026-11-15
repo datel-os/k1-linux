@@ -14,7 +14,3 @@ endmenu
 menu "[MSC] (eMMC/SD/SDIO) and Device Drivers"
 source "module_drivers/drivers/mmc/host/Kconfig"
 endmenu
-
-menu "[RTC] Drivers"
-source "module_drivers/drivers/rtc/Kconfig"
-endmenu
