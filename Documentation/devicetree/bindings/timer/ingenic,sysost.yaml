@@ -11,7 +11,9 @@ maintainers:
 
 description:
   The SYSOST in an Ingenic SoC provides one 64bit timer for clocksource
-  and one or more 32bit timers for clockevent.
+  and one or more 32bit timers for clockevent. In the X2000 the 64bit timer
+  and each CPU's 32bit timer are register blocks of their own, and the
+  interrupt is a line of each CPU.
 
 properties:
   "#clock-cells":
@@ -23,7 +25,11 @@ properties:
       - ingenic,x2000-ost
 
   reg:
-    maxItems: 1
+    minItems: 1
+    maxItems: 5
+    description:
+      The registers. For the X2000, the 64bit timer's first, then the 32bit
+      timer's of each CPU, in the CPUs' order.
 
   clocks:
     maxItems: 1
@@ -35,12 +41,29 @@ properties:
     maxItems: 1
 
 required:
-  - "#clock-cells"
   - compatible
   - reg
   - clocks
   - clock-names
   - interrupts
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: ingenic,x2000-ost
+    then:
+      properties:
+        "#clock-cells": false
+        reg:
+          minItems: 2
+    else:
+      properties:
+        reg:
+          maxItems: 1
+      required:
+        - "#clock-cells"
 
 additionalProperties: false
 
@@ -59,5 +82,21 @@ examples:
 
         interrupt-parent = <&cpuintc>;
         interrupts = <3>;
+    };
+
+  - |
+    #include <dt-bindings/clock/ingenic,x2000-cgu.h>
+
+    timer@12000000 {
+        compatible = "ingenic,x2000-ost";
+        reg = <0x12000000 0x18>,
+              <0x12100000 0x100>,
+              <0x12100100 0x100>;
+
+        clocks = <&cgu X2000_CLK_OST>;
+        clock-names = "ost";
+
+        interrupt-parent = <&cpuintc>;
+        interrupts = <4>;
     };
 ...

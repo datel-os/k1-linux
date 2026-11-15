@@ -730,6 +730,17 @@ config INGENIC_SYSOST
 	help
 	  Support for the SYSOST of the Ingenic X Series SoCs.
 
+config INGENIC_X2000_OST
+	bool "Clocksource/timer using the OST in the Ingenic X2000"
+	default MACH_X2000
+	depends on MIPS || COMPILE_TEST
+	depends on COMMON_CLK
+	select TIMER_OF
+	help
+	  Support for the operating system timers of the Ingenic X2000:
+	  a 64 bit counter for the whole SoC, which is the clock source,
+	  and an event timer for each CPU.
+
 config INGENIC_OST
 	bool "Clocksource using the OST in Ingenic JZ SoCs"
 	depends on MIPS || COMPILE_TEST

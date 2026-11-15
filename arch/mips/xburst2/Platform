@@ -10,9 +10,6 @@ load-$(CONFIG_MACH_XBURST2)	+= 0xffffffff80010000
 zload-$(CONFIG_MACH_XBURST2)	+= 0xffffffff80f00000
 all-$(CONFIG_MACH_XBURST2)	:= uzImage.bin
 
-# The SDK's drivers, linked after the kernel's own as in the SDK
-drivers-$(CONFIG_MACH_XBURST2)	+= module_drivers/
-
 cflags-$(CONFIG_MACH_XBURST2)	+= -I$(srctree)/arch/mips/xburst2/core/include
 cflags-$(CONFIG_SOC_X2000)	+= -I$(srctree)/arch/mips/xburst2/soc-x2000/include
 

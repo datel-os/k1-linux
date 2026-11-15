@@ -74,15 +74,16 @@
 		interrupts = <2>;
 	};
 
-	core_ost: core-ost@12000000 {
-		compatible = "ingenic,core-ost";
-		reg = <0x12000000 0x10000>, /*Global ost*/
-		      <0x12100000 0x10000>; /*Core ost*/
+	/* the SoC's counter, then each CPU's event timer */
+	ost: timer@12000000 {
+		compatible = "ingenic,x2000-ost";
+		reg = <0x12000000 0x18>,
+		      <0x12100000 0x100>,
+		      <0x12100100 0x100>;
 		interrupt-parent = <&cpuintc>;
-		interrupt-names = "sys_ost";
-		interrupts = <CORE_SYS_OST_IRQ>;
-		cpu-ost-map = 	<0 0x000>,
-				<1 0x100>;
+		interrupts = <4>;
+		clocks = <&cgu X2000_CLK_OST>;
+		clock-names = "ost";
 	};
 
 	/* the crystal; a board says its frequency */
