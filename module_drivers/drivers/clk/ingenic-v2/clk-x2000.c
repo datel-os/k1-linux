@@ -440,6 +440,17 @@ static void __init x2000_clk_init(struct device_node *np)
 	clk_register_fixed_factor(NULL, "pclk", "div_apb", 0, 1, 1);
 	clk_register_fixed_factor(NULL, "rtc", "mux_wdt", 0, 1, 1);
 
+	/*
+	 * Bit 21 of MSC0CDR is in that register alone. The SDK's SD host
+	 * driver set it whenever it chose the crystal as the source of an MSC
+	 * clock, for the card identification, and never cleared it. What it
+	 * switches is not documented; letting the crystal through to the
+	 * three MSC clocks would fit. It is set here, once, before a host
+	 * exists: a host setting it when it needs the crystal would write the
+	 * eMMC host's clock register while that host may be changing it.
+	 */
+	writel(readl(reg_base + CPM_MSC0CDR) | BIT(21), reg_base + CPM_MSC0CDR);
+
 	ingenic_clk_of_add_provider(np, ctx);
 
 	ingenic_clk_sleep_init(reg_base, x2000_clk_reg_sleep, x2000_nr_clk_reg_sleep);
