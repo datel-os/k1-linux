@@ -157,12 +157,15 @@
  * CPU, a few in a thousand with both CPUs busy), more when it is warm; the
  * same kernel and the same program give none at 912 MHz and below. Klipper
  * turns such a result into a step that lies before the previous one and
- * shuts the printer down. 816 MHz is one step of 96 MHz below the highest
- * clean rate that was measured.
+ * shuts the printer down. 912 MHz is the highest rate that was measured
+ * clean, the PLL moving in steps of 24 MHz: with the bed at 60 C the board
+ * gave a wrong result within a minute at 936 MHz and none in 25 minutes at
+ * 912 MHz. That is one step of margin; the rate was 816 MHz before, four
+ * steps below.
  */
 &cgu {
 	assigned-clocks = <&cgu X2000_CLK_APLL>;
-	assigned-clock-rates = <816000000>;
+	assigned-clock-rates = <912000000>;
 };
 
 &pinctrl {
