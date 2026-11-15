@@ -14,11 +14,13 @@
 #include <linux/dma-mapping.h>
 #include <linux/iopoll.h>
 #include <linux/kernel.h>
+#include <linux/mfd/syscon.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/pm_domain.h>
 #include <linux/pm_runtime.h>
+#include <linux/regmap.h>
 #include <linux/reset.h>
 #include <linux/sizes.h>
 
@@ -1120,6 +1122,132 @@ static int sg2042_init(struct device *dev, struct sdhci_host *host,
 					     ARRAY_SIZE(clk_ids), clk_ids);
 }
 
+/*
+ * Ingenic X2000. The card clock is the one the SoC's clock unit makes for the
+ * host (register MSCnCDR there): the controller's own divider is written as
+ * everywhere else and has no effect. The clock unit cannot divide its PLL
+ * down to the 400 kHz of the card identification, so the 24 MHz crystal is
+ * the source for that and the PLL for everything faster.
+ *
+ * One bit of the host's MSCnCDR is the host's to write. Bit 20 says where
+ * the phase of the receive clock comes from: set, which it is after a reset,
+ * a fixed phase out of the same register; clear, the controller's tuning. It
+ * is cleared before a tuning and, as in the vendor's kernel, not set again.
+ * The clock unit's driver writes the same register, but only when this host
+ * asks it for a source or a rate, and the host does not ask while it tunes.
+ */
+#define X2000_CGU_MSCCDR_RX_FIXED	BIT(20)
+
+#define X2000_CRYSTAL_MAX_HZ		400000
+
+struct x2000_priv {
+	struct regmap *cgu;
+	unsigned int cdr;	/* the host's MSCnCDR in the clock unit */
+	struct clk *ext;
+	struct clk *pll;
+};
+
+static void dwcmshc_x2000_set_clock(struct sdhci_host *host, unsigned int clock)
+{
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct dwcmshc_priv *dwc_priv = sdhci_pltfm_priv(pltfm_host);
+	struct x2000_priv *priv = dwc_priv->priv;
+	struct clk *mux = clk_get_parent(pltfm_host->clk);
+	int err;
+
+	if (!clock) {
+		sdhci_set_clock(host, 0);
+		return;
+	}
+
+	/*
+	 * The clock unit takes a change of source or rate over only while the
+	 * controller asks for its clock, which in version 4 mode takes the
+	 * internal clock enable and the PLL enable together: without them the
+	 * change stays pending. So for the change the card's clock is stopped
+	 * and those two are on.
+	 */
+	sdhci_writew(host, SDHCI_CLOCK_INT_EN | SDHCI_CLOCK_PLL_EN,
+		     SDHCI_CLOCK_CONTROL);
+
+	err = clk_set_parent(mux, clock > X2000_CRYSTAL_MAX_HZ ? priv->pll :
+								  priv->ext);
+	if (!err)
+		err = clk_set_rate(pltfm_host->clk, clock);
+	if (err)
+		dev_err(mmc_dev(host->mmc),
+			"failed to set the card clock to %u Hz: %d\n", clock, err);
+
+	sdhci_set_clock(host, clock);
+
+	/* What the card gets is the clock unit's rate, not the divider's */
+	host->mmc->actual_clock = clk_get_rate(pltfm_host->clk);
+}
+
+static int dwcmshc_x2000_execute_tuning(struct mmc_host *mmc, u32 opcode)
+{
+	struct sdhci_host *host = mmc_priv(mmc);
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct dwcmshc_priv *dwc_priv = sdhci_pltfm_priv(pltfm_host);
+	struct x2000_priv *priv = dwc_priv->priv;
+
+	regmap_clear_bits(priv->cgu, priv->cdr, X2000_CGU_MSCCDR_RX_FIXED);
+
+	return dwcmshc_execute_tuning(mmc, opcode);
+}
+
+static int dwcmshc_x2000_init(struct device *dev, struct sdhci_host *host,
+			      struct dwcmshc_priv *dwc_priv)
+{
+	struct of_phandle_args cgu;
+	struct x2000_priv *priv;
+	int ret;
+
+	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
+	if (!priv)
+		return -ENOMEM;
+
+	/*
+	 * The clock unit has a driver of its own, which holds its clocks: a
+	 * regmap over its registers is all that is wanted of the node.
+	 */
+	ret = of_parse_phandle_with_fixed_args(dev->of_node, "ingenic,cgu", 1,
+					       0, &cgu);
+	if (ret)
+		return dev_err_probe(dev, ret,
+				     "failed to find the clock unit\n");
+
+	priv->cgu = device_node_to_regmap(cgu.np);
+	priv->cdr = cgu.args[0];
+	of_node_put(cgu.np);
+	if (IS_ERR(priv->cgu))
+		return dev_err_probe(dev, PTR_ERR(priv->cgu),
+				     "failed to get the clock unit's registers\n");
+
+	priv->ext = devm_clk_get(dev, "ext");
+	if (IS_ERR(priv->ext))
+		return dev_err_probe(dev, PTR_ERR(priv->ext),
+				     "failed to get ext clk\n");
+
+	priv->pll = devm_clk_get(dev, "pll");
+	if (IS_ERR(priv->pll))
+		return dev_err_probe(dev, PTR_ERR(priv->pll),
+				     "failed to get pll clk\n");
+
+	dwc_priv->priv = priv;
+
+	/*
+	 * The vendor's kernel runs the controller in version 4 mode. The
+	 * common code switches that on only where the capabilities offer
+	 * 64 bit addressing, and these do not.
+	 */
+	sdhci_enable_v4_mode(host);
+
+	host->mmc_host_ops.execute_tuning = dwcmshc_x2000_execute_tuning;
+
+	return 0;
+}
+
 static const struct sdhci_ops sdhci_dwcmshc_ops = {
 	.set_clock		= sdhci_set_clock,
 	.set_bus_width		= sdhci_set_bus_width,
@@ -1194,6 +1322,15 @@ static const struct sdhci_ops sdhci_dwcmshc_sg2042_ops = {
 	.platform_execute_tuning = th1520_execute_tuning,
 };
 
+static const struct sdhci_ops sdhci_dwcmshc_x2000_ops = {
+	.set_clock		= dwcmshc_x2000_set_clock,
+	.set_bus_width		= sdhci_set_bus_width,
+	.set_uhs_signaling	= dwcmshc_set_uhs_signaling,
+	.reset			= dwcmshc_reset,
+	.adma_write_desc	= dwcmshc_adma_write_desc,
+	.irq			= dwcmshc_cqe_irq_handler,
+};
+
 static const struct dwcmshc_pltfm_data sdhci_dwcmshc_pdata = {
 	.pdata = {
 		.ops = &sdhci_dwcmshc_ops,
@@ -1261,6 +1398,24 @@ static const struct dwcmshc_pltfm_data sdhci_dwcmshc_sg2042_pdata = {
 		.quirks2 = SDHCI_QUIRK2_PRESET_VALUE_BROKEN,
 	},
 	.init = sg2042_init,
+};
+
+/*
+ * The quirks are the vendor's kernel's. The base clock in the capabilities
+ * (200 MHz) is left to stand: it gives the limits the core derives from it,
+ * and the divider it is used for does nothing here.
+ */
+static const struct dwcmshc_pltfm_data sdhci_dwcmshc_x2000_pdata = {
+	.pdata = {
+		.ops = &sdhci_dwcmshc_x2000_ops,
+		.quirks = SDHCI_QUIRK_NO_HISPD_BIT |
+			  SDHCI_QUIRK_NO_ENDATTR_IN_NOPDESC |
+			  SDHCI_QUIRK_INVERTED_WRITE_PROTECT |
+			  SDHCI_QUIRK_32BIT_DMA_ADDR |
+			  SDHCI_QUIRK_32BIT_DMA_SIZE,
+		.quirks2 = SDHCI_QUIRK2_PRESET_VALUE_BROKEN,
+	},
+	.init = dwcmshc_x2000_init,
 };
 
 static const struct cqhci_host_ops dwcmshc_cqhci_ops = {
@@ -1331,6 +1486,10 @@ dsbl_cqe_caps:
 }
 
 static const struct of_device_id sdhci_dwcmshc_dt_ids[] = {
+	{
+		.compatible = "ingenic,x2000-dwcmshc",
+		.data = &sdhci_dwcmshc_x2000_pdata,
+	},
 	{
 		.compatible = "rockchip,rk3588-dwcmshc",
 		.data = &sdhci_dwcmshc_rk35xx_pdata,
