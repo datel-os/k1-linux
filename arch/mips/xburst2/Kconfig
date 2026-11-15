@@ -18,6 +18,9 @@ config SOC_X2000
 	select PINCTRL_INGENIC
 	select TIMER_OF
 
+config XBURST2_SMP
+	def_bool SMP
+
 config EXTAL_CLOCK
 	int "extal clock in MHz"
 	default 24

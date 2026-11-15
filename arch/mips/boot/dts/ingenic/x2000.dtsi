@@ -63,6 +63,16 @@
 		compatible = "mti,cpu-interrupt-controller";
 	};
 
+	/* the core control unit: the CPUs' resets, sleep states and mailboxes */
+	ccu: core-control-unit@12200000 {
+		compatible = "ingenic,x2000-ccu";
+		reg = <0x12200000 0x2000>;
+
+		/* a mailbox's interrupt is a line of its CPU */
+		interrupt-parent = <&cpuintc>;
+		interrupts = <3>;
+	};
+
 	intc: interrupt-controller@12300000 {
 		compatible = "ingenic,x2000-intc";
 		/* a block of registers for each CPU */

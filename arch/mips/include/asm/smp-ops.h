@@ -104,4 +104,13 @@ static inline int register_cps_smp_ops(void)
 }
 #endif
 
+#ifdef CONFIG_XBURST2_SMP
+extern int register_xburst2_smp_ops(void);
+#else
+static inline int register_xburst2_smp_ops(void)
+{
+	return -ENODEV;
+}
+#endif
+
 #endif /* __ASM_SMP_OPS_H */

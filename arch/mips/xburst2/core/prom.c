@@ -44,7 +44,6 @@ static __init void prom_init_cmdline(int argc, char *argv[])
 
 	*dst = 0;
 }
-extern struct plat_smp_ops xburst2_smp_ops;
 static void *_fw_fdt_addr;
 
 void __init prom_init(void)
@@ -62,9 +61,6 @@ void __init prom_init(void)
 	}
 
 	mips_machtype = MACH_INGENIC_X2000;
-#ifdef CONFIG_SMP
-	register_smp_ops(&xburst2_smp_ops);
-#endif
 }
 
 const char *get_system_type(void)

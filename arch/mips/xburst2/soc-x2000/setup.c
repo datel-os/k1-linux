@@ -25,6 +25,7 @@
 #include <linux/clocksource.h>
 
 #include <asm/prom.h>
+#include <asm/smp-ops.h>
 #include <asm/time.h>
 #include <core_base.h>
 #include <soc/base.h>
@@ -73,6 +74,10 @@ void __init plat_mem_setup(void)
 void __init device_tree_init(void)
 {
 	unflatten_and_copy_device_tree();
+
+	/* The SMP operations find the core control unit in the device tree */
+	if (register_xburst2_smp_ops())
+		register_up_smp_ops();
 }
 
 static int __init plat_of_populate(void)
