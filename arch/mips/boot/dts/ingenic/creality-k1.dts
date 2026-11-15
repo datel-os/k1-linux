@@ -111,6 +111,19 @@
 		enable-active-high;
 	};
 
+	/*
+	 * WL_REG_ON, PE2: low holds the Wi-Fi half of the module in reset. The
+	 * MMC core lets go of the line when it powers the SDIO host up, and
+	 * then waits 200 ms before the first command, for the chip to start.
+	 * The wait cannot be left to the scan's retries: a scan that fails
+	 * pulls the line low again.
+	 */
+	wifi_pwrseq: wifi-pwrseq {
+		compatible = "mmc-pwrseq-simple";
+		reset-gpios = <&gpe 2 GPIO_ACTIVE_LOW>;
+		post-power-on-delay-ms = <200>;
+	};
+
 	/* The mainboard's status LED. No LED driver is in k1_defconfig. */
 	leds {
 		compatible = "gpio-leds";
@@ -209,15 +222,10 @@
 		groups = "mmc1-1bit", "mmc1-4bit";
 	};
 
-	/* PE23 as the RTC's 32 kHz clock output, and held low instead */
+	/* PE23 as the RTC's 32 kHz clock output, which the Wi-Fi module runs on */
 	pins_clk32k: clk32k {
 		function = "clk32k";
 		groups = "clk32k";
-	};
-
-	pins_clk32k_low: clk32k-low {
-		pins = "PE23";
-		output-low;
 	};
 };
 
@@ -312,15 +320,13 @@
 };
 
 /*
- * The Wi-Fi half of the module, on SDIO. The driver powers it up itself and
- * then has the card detected (ingenic,sdio_clk): WL_REG_ON is PE2, and the
- * 32 kHz clock the module needs comes out of PE23 in the pin state "enable".
+ * The Wi-Fi half of the module, on SDIO. The MMC core powers it up through
+ * the power sequence (WL_REG_ON). The 32 kHz clock the module needs comes
+ * out of PE23 from the moment the host is probed, before that line rises.
  */
 &msc1 {
-	pinctrl-names = "default", "enable", "disable";
-	pinctrl-0 = <&pins_mmc1>;
-	pinctrl-1 = <&pins_clk32k>;
-	pinctrl-2 = <&pins_clk32k_low>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pins_mmc1>, <&pins_clk32k>;
 	bus-width = <4>;
 	max-frequency = <100000000>;
 	cap-sd-highspeed;
@@ -329,8 +335,7 @@
 	non-removable;
 	keep-power-in-suspend;
 	vmmc-supply = <&wifi_bt_power>;
-	ingenic,sdio_clk = <1>;
-	wlan-reg-on-gpios = <&gpe 2 GPIO_ACTIVE_HIGH>;
+	mmc-pwrseq = <&wifi_pwrseq>;
 	status = "okay";
 };
 
