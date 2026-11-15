@@ -452,37 +452,6 @@ config MACH_INGENIC_SOC
 	select CPU_SUPPORTS_CPUFREQ
 	select MIPS_EXTERNAL_TIMER
 
-config MACH_XBURST2
-	bool "Ingenic XBurst2 based machines, with the SDK's platform code"
-	select BUILTIN_DTB
-	select COMMON_CLK
-	select CPU_SUPPORTS_CPUFREQ
-	select DMA_NONCOHERENT
-	select GPIOLIB
-	select HARDIRQS_SW_RESEND
-	select IRQ_MIPS_CPU
-	select MIPS_EXTERNAL_TIMER
-	select MIPS_O32_FP64_SUPPORT
-	select SMP_UP if SMP
-	select SYS_HAS_CPU_MIPS32_R1
-	select SYS_HAS_CPU_MIPS32_R2
-	select SYS_HAS_CPU_MIPS32_R5
-	select SYS_HAS_EARLY_PRINTK
-	select SYS_SUPPORTS_32BIT_KERNEL
-	select SYS_SUPPORTS_HIGHMEM
-	select SYS_SUPPORTS_LITTLE_ENDIAN
-	select SYS_SUPPORTS_SMP
-	select SYS_SUPPORTS_ZBOOT_UART16550
-	select USE_OF
-	select WEAK_ORDERING
-	select WEAK_REORDERING_BEYOND_LLSC
-	select XBURST2_CPU_SCACHE
-	help
-	  The Ingenic X2000 with the platform code of Ingenic's SDK kernel
-	  (arch/mips/xburst2), as the Creality K1 runs it. It does not share code with the "Ingenic SoC
-	  based machines" above, which are the upstream drivers for the older
-	  SoCs.
-
 config LANTIQ
 	bool "Lantiq based platforms"
 	select DMA_NONCOHERENT
@@ -1105,7 +1074,6 @@ source "arch/mips/ralink/Kconfig"
 source "arch/mips/sgi-ip27/Kconfig"
 source "arch/mips/sibyte/Kconfig"
 source "arch/mips/txx9/Kconfig"
-source "arch/mips/xburst2/Kconfig"
 source "arch/mips/cavium-octeon/Kconfig"
 source "arch/mips/loongson2ef/Kconfig"
 source "arch/mips/loongson32/Kconfig"

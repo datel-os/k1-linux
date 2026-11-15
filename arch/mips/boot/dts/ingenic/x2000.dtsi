@@ -156,7 +156,8 @@
 
 		/*
 		 * Not a system-power-controller: the power-off is the
-		 * platform's (arch/mips/xburst2/soc-x2000/reset.c). The clock
+		 * board code's (arch/mips/generic/board-ingenic-x2000.c),
+		 * which knows the X2000's units for the two times. The clock
 		 * is the register gate; its parent is the 32.768 kHz
 		 * oscillator the counter runs on.
 		 */

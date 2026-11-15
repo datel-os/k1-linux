@@ -4,7 +4,9 @@
 # pull request and for every push to main. It answers one question, "does the
 # tree still compile", with the distribution's cross compiler; the kernel that
 # goes on the printer is built with the Datel OS toolchain, and nothing here
-# is run or published.
+# is run or published. It builds what the printer takes, the self-extracting
+# image in a U-Boot header and the modules; a plain make would build the
+# platform's default, a FIT image, instead of the first.
 #
 # The configuration is k1_defconfig as soon as that file exists. Until then it
 # is upstream's cu1830-neo_defconfig, the closest relative in the tree
@@ -83,7 +85,7 @@ jobs:
       - name: Build
         run: |
           ccache --zero-stats > /dev/null
-          make O=build -j"$(nproc)" CC="ccache ${CROSS_COMPILE}gcc" 2>&1 | tee build.log
+          make O=build -j"$(nproc)" CC="ccache ${CROSS_COMPILE}gcc" uzImage.bin modules 2>&1 | tee build.log
 
       - name: First errors
         if: failure()

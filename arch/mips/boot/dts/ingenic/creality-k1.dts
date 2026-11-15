@@ -24,6 +24,10 @@
 	model = "Creality K1";
 	compatible = "creality,k1", "ingenic,x2000";
 
+	chosen {
+		stdout-path = "serial2:115200n8";
+	};
+
 	/*
 	 * The boot loader names the memory on the command line (mem=256M@0x0),
 	 * so there is no memory node. The two areas here are the top 33 MiB of
@@ -165,8 +169,8 @@
 	/*
 	 * The supply of two pin banks, as the stock firmware has them: port A
 	 * at 3.3 V, port E at 1.8 V. Port E carries the module's control
-	 * lines and its 32 kHz clock. The platform code reads these two
-	 * (arch/mips/xburst2/soc-x2000/setup.c); the pin control driver's
+	 * lines and its 32 kHz clock. The board code reads these two
+	 * (arch/mips/generic/board-ingenic-x2000.c); the pin control driver's
 	 * binding does not know them.
 	 */
 	ingenic,gpa-microvolt = <3300000>;

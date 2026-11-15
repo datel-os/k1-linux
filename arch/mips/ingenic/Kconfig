@@ -43,6 +43,10 @@ config X1830_CU1830_NEO
 	bool "YSH & ATIL CU1830 Module with Neo backplane"
 	select MACH_X1830
 
+config X2000_CREALITY_K1
+	bool "Creality K1"
+	select MACH_X2000
+
 endchoice
 
 config MACH_JZ4725B
@@ -76,3 +80,23 @@ config MACH_X1830
 	select MIPS_CPU_SCACHE
 	select SYS_HAS_CPU_MIPS32_R2
 	select SYS_SUPPORTS_HIGHMEM
+
+# The X2000's CPU is an XBurst2: two CPUs that are threads of one core, of
+# MIPS32 release 5 without ERETNC. What its CPU feature overrides say holds
+# for it alone, so it is not part of the generic board's kernel. No CPU
+# hotplug: see arch/mips/kernel/smp-xburst2.c.
+config MACH_X2000
+	bool
+	select HARDIRQS_SW_RESEND
+	select MIPS_O32_FP64_SUPPORT
+	select SMP_UP if SMP
+	select SYS_HAS_CPU_MIPS32_R2
+	select SYS_HAS_CPU_MIPS32_R5
+	select SYS_SUPPORTS_HIGHMEM
+	select SYS_SUPPORTS_SMP
+	select WEAK_ORDERING
+	select WEAK_REORDERING_BEYOND_LLSC
+	select XBURST2_CPU_SCACHE
+
+config XBURST2_SMP
+	def_bool SMP && MACH_X2000
