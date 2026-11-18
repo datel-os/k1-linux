@@ -1,6 +1,6 @@
 # Linux for the Creality K1
 
-The kernel of [Datel OS](https://github.com/zales/datel-os) for the Creality K1 3D printer, whose mainboard carries an Ingenic X2000: two XBurst2 MIPS32 cores and 256 MB of RAM. It is kernel.org's stable Linux 6.18 plus the support the board needs, added through pull requests.
+The kernel of [Datel OS](https://github.com/datel-os/datel-os) for the Creality K1 3D printer, whose mainboard carries an Ingenic X2000: two XBurst2 MIPS32 cores and 256 MB of RAM. It is kernel.org's stable Linux 6.18 plus the support the board needs, added through pull requests.
 
 **State:** phase B is complete but for the board's own files, the last row of the table below. On 15 November 2026 a kernel built from this tree as it was before the CPU's clock was raised (`k1_defconfig`, the board's device tree built in) booted a K1 and passed the checks of its last parts: both CPU cores at 816 MHz, Klipper with its three microcontrollers, Wi-Fi, the eMMC, the camera at 30 frames a second, the Helix codec's tests, a restart, a reset by the watchdog with the kernel log kept in pstore, and a start after a power cycle. The same day the tree as it is now, with the CPU at 912 MHz, booted the K1 with both cores at that rate, Klipper, Wi-Fi, the eMMC and the camera, and did 25 minutes of floating-point work on a hot printer without a wrong result (1,617,896 rounds). One check is older: the last print, of 78 minutes, ran on the tree as of pull request 21. What is known to go wrong is listed under [Known problems](#known-problems).
 
@@ -89,7 +89,7 @@ A kernel meant for a printer needs four things more:
 The tree has 13 pairs of files whose names differ only by case (`xt_DSCP.c` and `xt_dscp.c` in netfilter, for example), and the default macOS file system cannot hold both of a pair. A sparse checkout that leaves those 26 files out keeps `git status` clean:
 
 ```bash
-git clone --no-checkout https://github.com/zales/k1-linux.git && cd k1-linux
+git clone --no-checkout https://github.com/datel-os/k1-linux.git && cd k1-linux
 git ls-tree -r --name-only HEAD |
   awk '{ k = tolower($0); n[k]++; p[k] = p[k] "!/" $0 "\n" }
        END { print "/*"; for (k in n) if (n[k] > 1) printf "%s", p[k] }' |
