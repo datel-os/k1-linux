@@ -265,6 +265,21 @@ static const struct ingenic_tcu_clk_info ingenic_tcu_ost_clk_info =
 					 DEF_TIMER("ost", 15, TCU_REG_OST_TCSR);
 #undef DEF_TIMER
 
+/* Is this the watchdog's clock, running, with the watchdog enabled? */
+static bool __init ingenic_tcu_watchdog_counts(struct ingenic_tcu *tcu,
+					       unsigned int idx,
+					       struct clk_hw *hw)
+{
+	unsigned int tcer;
+
+	if (idx != TCU_CLK_WDT || !ingenic_tcu_is_enabled(hw))
+		return false;
+
+	regmap_read(tcu->map, TCU_REG_WDT_TCER, &tcer);
+
+	return tcer & TCU_WDT_TCER_TCEN;
+}
+
 static int __init ingenic_tcu_register_clock(struct ingenic_tcu *tcu,
 			unsigned int idx, enum tcu_clk_parent parent,
 			const struct ingenic_tcu_clk_info *info,
@@ -282,10 +297,20 @@ static int __init ingenic_tcu_register_clock(struct ingenic_tcu *tcu,
 	tcu_clk->info = info;
 	tcu_clk->tcu = tcu;
 
-	/* Reset channel and clock divider, set default parent */
-	ingenic_tcu_enable_regs(&tcu_clk->hw);
-	regmap_update_bits(tcu->map, info->tcsr_reg, 0xffff, BIT(parent));
-	ingenic_tcu_disable_regs(&tcu_clk->hw);
+	/*
+	 * Reset channel and clock divider, set default parent. Not for a
+	 * watchdog that the boot loader left counting: that one is there to
+	 * reset a kernel that does not come up, and it keeps the clock it was
+	 * given until its driver takes it over. Without its divider it would
+	 * count up to 1024 times faster, and stopping the clock does not stop
+	 * every SoC's watchdog: an X2000 with 30 s left was reset within 30 ms
+	 * of this function.
+	 */
+	if (!ingenic_tcu_watchdog_counts(tcu, idx, &tcu_clk->hw)) {
+		ingenic_tcu_enable_regs(&tcu_clk->hw);
+		regmap_update_bits(tcu->map, info->tcsr_reg, 0xffff, BIT(parent));
+		ingenic_tcu_disable_regs(&tcu_clk->hw);
+	}
 
 	err = clk_hw_register(NULL, &tcu_clk->hw);
 	if (err) {
