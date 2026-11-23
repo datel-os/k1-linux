@@ -271,6 +271,7 @@ static int jz4740_wdt_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct jz4740_wdt_drvdata *drvdata;
 	struct watchdog_device *jz4740_wdt;
+	unsigned int tcer;
 	long rate;
 	int ret;
 
@@ -313,6 +314,20 @@ static int jz4740_wdt_probe(struct platform_device *pdev)
 	if (IS_ERR(drvdata->map)) {
 		dev_err(dev, "regmap not found\n");
 		return PTR_ERR(drvdata->map);
+	}
+
+	/*
+	 * A watchdog that the boot loader started goes on counting until
+	 * somebody opens the device, so that a system which does not come up
+	 * is reset. Nobody has enabled its clock here, and an unused clock is
+	 * switched off at the end of the boot: hold it.
+	 */
+	regmap_read(drvdata->map, TCU_REG_WDT_TCER, &tcer);
+	if (tcer & TCU_WDT_TCER_TCEN) {
+		ret = clk_prepare_enable(drvdata->clk);
+		if (ret)
+			return ret;
+		dev_info(dev, "left running by the boot loader\n");
 	}
 
 	if (drvdata->version >= ID_X2000) {
