@@ -19,6 +19,23 @@ config DRM_INGENIC
 
 	  If M is selected the module will be called ingenic-drm.
 
+config DRM_INGENIC_X2000_DPU
+	tristate "DRM Support for the Ingenic X2000 display controller"
+	depends on MIPS || COMPILE_TEST
+	depends on DRM
+	depends on OF
+	depends on COMMON_CLK
+	select DRM_BRIDGE
+	select DRM_CLIENT_SELECTION
+	select DRM_PANEL_BRIDGE
+	select DRM_KMS_HELPER
+	select DRM_GEM_DMA_HELPER
+	help
+	  Choose this option for the display controller (DPU) of the Ingenic
+	  X2000. It drives a parallel RGB panel from one plane.
+
+	  If M is selected the module will be called ingenic-x2000-dpu.
+
 if DRM_INGENIC
 
 config DRM_INGENIC_IPU

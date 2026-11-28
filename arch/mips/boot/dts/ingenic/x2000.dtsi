@@ -491,6 +491,16 @@
 		#size-cells = <1>;
 		ranges = <>;
 
+		dpu: lcd-controller@13050000 {
+			compatible = "ingenic,x2000-dpu";
+			reg = <0x13050000 0x10000>;
+			interrupt-parent = <&intc>;
+			interrupts = <IRQ_LCD>;
+			clocks = <&cgu X2000_CLK_LCD>;
+			clock-names = "lcd";
+			status = "disabled";
+		};
+
 		helix: helix@13200000 {
 			compatible = "ingenic,x2000-helix";
 			reg = <0x13200000 0x100000>;

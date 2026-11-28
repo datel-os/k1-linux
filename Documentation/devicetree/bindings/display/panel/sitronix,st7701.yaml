@@ -26,6 +26,7 @@ properties:
       - enum:
           - anbernic,rg-arc-panel
           - anbernic,rg28xx-panel
+          - creality,k1-panel-tjc
           - densitron,dmt028vghmcmi-1a
           - elida,kd50t048a
           - techstar,ts8550b
@@ -72,6 +73,7 @@ allOf:
             # SPI connected panels
             enum:
               - anbernic,rg28xx-panel
+              - creality,k1-panel-tjc
     then:
       $ref: /schemas/spi/spi-peripheral-props.yaml#
 
@@ -84,6 +86,7 @@ allOf:
               enum:
                 - anbernic,rg-arc-panel
                 - anbernic,rg28xx-panel
+                - creality,k1-panel-tjc
                 - densitron,dmt028vghmcmi-1a
                 - elida,kd50t048a
                 - techstar,ts8550b

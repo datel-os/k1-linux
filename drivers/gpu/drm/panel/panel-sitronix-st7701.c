@@ -10,6 +10,7 @@
 #include <drm/drm_panel.h>
 
 #include <linux/bitfield.h>
+#include <linux/media-bus-format.h>
 #include <linux/gpio/consumer.h>
 #include <linux/delay.h>
 #include <linux/module.h>
@@ -127,6 +128,16 @@ struct st7701_panel_desc {
 
 	/* GIP sequence, fully custom and undocumented. */
 	void		(*gip_sequence)(struct st7701 *st7701);
+
+	/*
+	 * The whole set-up as the panel's vendor sends it, for a panel whose
+	 * values are known only as such a list; it takes the place of the
+	 * generic sequence built from the fields above, and of gip_sequence.
+	 */
+	void		(*init_sequence)(struct st7701 *st7701);
+
+	/* Bus format on the parallel RGB side, 0 if the panel does not say. */
+	u32		bus_format;
 };
 
 struct st7701 {
@@ -558,10 +569,14 @@ static int st7701_prepare(struct drm_panel *panel)
 	gpiod_set_value(st7701->reset, 1);
 	msleep(150);
 
-	st7701_init_sequence(st7701);
+	if (st7701->desc->init_sequence) {
+		st7701->desc->init_sequence(st7701);
+	} else {
+		st7701_init_sequence(st7701);
 
-	if (st7701->desc->gip_sequence)
-		st7701->desc->gip_sequence(st7701);
+		if (st7701->desc->gip_sequence)
+			st7701->desc->gip_sequence(st7701);
+	}
 
 	/* Disable Command2 */
 	st7701_switch_cmd_bkx(st7701, false, 0);
@@ -633,6 +648,10 @@ static int st7701_get_modes(struct drm_panel *panel,
 
 	connector->display_info.width_mm = desc_mode->width_mm;
 	connector->display_info.height_mm = desc_mode->height_mm;
+
+	if (st7701->desc->bus_format)
+		drm_display_info_set_bus_formats(&connector->display_info,
+						 &st7701->desc->bus_format, 1);
 
 	/*
 	 * TODO: Remove once all drm drivers call
@@ -1383,6 +1402,105 @@ static void st7701_dsi_remove(struct mipi_dsi_device *dsi)
 	mipi_dsi_detach(dsi);
 }
 
+/*
+ * The panel of the Creality K1 whose board reports lcm_id 3 (vendor "TJC"):
+ * 480x800, set up over 3-wire 9-bit SPI. Its values are known only as the
+ * vendor's list (Creality's lcd_st7701_9bit_spi_tjc_480_800 module), so it
+ * is sent as that list. The board wires 16 of the panel's data lines.
+ */
+static void k1_tjc_init_sequence(struct st7701 *st7701)
+{
+	ST7701_WRITE(st7701, MIPI_DCS_SET_PIXEL_FORMAT, 0x60);
+
+	st7701_switch_cmd_bkx(st7701, true, 3);
+	ST7701_WRITE(st7701, 0xEF, 0x08);
+
+	st7701_switch_cmd_bkx(st7701, true, 0);
+	ST7701_WRITE(st7701, ST7701_CMD2_BK0_LNESET, 0x63, 0x00);
+	ST7701_WRITE(st7701, ST7701_CMD2_BK0_PORCTRL, 0x0A, 0x0C);
+	ST7701_WRITE(st7701, ST7701_CMD2_BK0_INVSEL, 0x31, 0x08);
+	ST7701_WRITE(st7701, 0xCC, 0x18);
+	ST7701_WRITE(st7701, ST7701_CMD2_BK0_PVGAMCTRL,
+		     0x00, 0x08, 0x10, 0x0E, 0x11, 0x07, 0x08, 0x08,
+		     0x08, 0x25, 0x04, 0x12, 0x0F, 0x2C, 0x30, 0x1F);
+	ST7701_WRITE(st7701, ST7701_CMD2_BK0_NVGAMCTRL,
+		     0x00, 0x11, 0x18, 0x0C, 0x10, 0x05, 0x07, 0x09,
+		     0x08, 0x24, 0x04, 0x11, 0x10, 0x2B, 0x30, 0x1F);
+
+	st7701_switch_cmd_bkx(st7701, true, 1);
+	ST7701_WRITE(st7701, ST7701_CMD2_BK1_VRHS, 0x4D);
+	ST7701_WRITE(st7701, ST7701_CMD2_BK1_VCOM, 0x39);
+	ST7701_WRITE(st7701, ST7701_CMD2_BK1_VGHSS, 0x87);
+	ST7701_WRITE(st7701, ST7701_CMD2_BK1_TESTCMD, 0x80);
+	ST7701_WRITE(st7701, ST7701_CMD2_BK1_VGLS, 0x47);
+	ST7701_WRITE(st7701, ST7701_CMD2_BK1_PWCTLR1, 0x8A);
+	ST7701_WRITE(st7701, ST7701_CMD2_BK1_PWCTLR2, 0x20);
+	ST7701_WRITE(st7701, 0xB9, 0x10, 0x13);
+	ST7701_WRITE(st7701, 0xC0, 0x09);
+	ST7701_WRITE(st7701, ST7701_CMD2_BK1_SPD1, 0x78);
+	ST7701_WRITE(st7701, ST7701_CMD2_BK1_SPD2, 0x78);
+	ST7701_WRITE(st7701, ST7701_CMD2_BK1_MIPISET1, 0x88);
+	msleep(100);
+
+	ST7701_WRITE(st7701, 0xE0, 0x00, 0x00, 0x02);
+	ST7701_WRITE(st7701, 0xE1, 0x04, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00,
+		     0x00, 0x00, 0x20, 0x20);
+	ST7701_WRITE(st7701, 0xE2, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		     0x00, 0x00, 0x00, 0x00, 0x00, 0x00);
+	ST7701_WRITE(st7701, 0xE3, 0x00, 0x00, 0x33, 0x00);
+	ST7701_WRITE(st7701, 0xE4, 0x22, 0x00);
+	ST7701_WRITE(st7701, 0xE5, 0x04, 0x34, 0xAA, 0xAA, 0x06, 0x34, 0xAA,
+		     0xAA, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00);
+	ST7701_WRITE(st7701, 0xE6, 0x00, 0x00, 0x33, 0x00);
+	ST7701_WRITE(st7701, 0xE7, 0x22, 0x00);
+	ST7701_WRITE(st7701, 0xE8, 0x05, 0x34, 0xAA, 0xAA, 0x07, 0x34, 0xAA,
+		     0xAA, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00);
+	ST7701_WRITE(st7701, 0xEB, 0x02, 0x00, 0x40, 0x40, 0x00, 0x00, 0x00);
+	ST7701_WRITE(st7701, 0xEC, 0x00, 0x00);
+	ST7701_WRITE(st7701, 0xED, 0xFA, 0x45, 0x0B, 0xFF, 0xFF, 0xFF, 0xFF,
+		     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xB0, 0x54, 0xAF);
+	ST7701_WRITE(st7701, 0xEF, 0x10, 0x0D, 0x04, 0x08, 0x3F, 0x1F);
+
+	st7701_switch_cmd_bkx(st7701, true, 3);
+	ST7701_WRITE(st7701, 0xE8, 0x00, 0x0E);
+
+	st7701_switch_cmd_bkx(st7701, false, 0);
+	ST7701_WRITE(st7701, MIPI_DCS_EXIT_SLEEP_MODE);
+	msleep(120);
+
+	st7701_switch_cmd_bkx(st7701, true, 3);
+	ST7701_WRITE(st7701, 0xE8, 0x00, 0x0C);
+	msleep(10);
+	ST7701_WRITE(st7701, 0xE8, 0x00, 0x00);
+}
+
+static const struct drm_display_mode k1_tjc_mode = {
+	.clock		= 21522,
+
+	.hdisplay	= 480,
+	.hsync_start	= 480 + 10,
+	.hsync_end	= 480 + 10 + 10,
+	.htotal		= 480 + 10 + 10 + 10,
+
+	.vdisplay	= 800,
+	.vsync_start	= 800 + 20,
+	.vsync_end	= 800 + 20 + 4,
+	.vtotal		= 800 + 20 + 4 + 20,
+
+	.width_mm	= 56,
+	.height_mm	= 93,
+
+	.flags		= DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC,
+
+	.type = DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED,
+};
+
+static const struct st7701_panel_desc k1_tjc_desc = {
+	.mode = &k1_tjc_mode,
+	.init_sequence = k1_tjc_init_sequence,
+	.bus_format = MEDIA_BUS_FMT_RGB565_1X16,
+};
+
 static const struct of_device_id st7701_dsi_of_match[] = {
 	{ .compatible = "anbernic,rg-arc-panel", .data = &rg_arc_desc },
 	{ .compatible = "densitron,dmt028vghmcmi-1a", .data = &dmt028vghmcmi_1a_desc },
@@ -1395,12 +1513,14 @@ MODULE_DEVICE_TABLE(of, st7701_dsi_of_match);
 
 static const struct of_device_id st7701_spi_of_match[] = {
 	{ .compatible = "anbernic,rg28xx-panel", .data = &rg28xx_desc },
+	{ .compatible = "creality,k1-panel-tjc", .data = &k1_tjc_desc },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, st7701_spi_of_match);
 
 static const struct spi_device_id st7701_spi_ids[] = {
 	{ "rg28xx-panel" },
+	{ "k1-panel-tjc" },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(spi, st7701_spi_ids);
