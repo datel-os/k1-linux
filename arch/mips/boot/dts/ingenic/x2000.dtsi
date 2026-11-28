@@ -424,6 +424,13 @@
 			#phy-cells = <0>;
 			status = "disabled";
 		};
+
+		icodec: audio-codec@10020000 {
+			compatible = "ingenic,x2000-icodec";
+			reg = <0x10020000 0x1000>;
+			#sound-dai-cells = <0>;
+			status = "disabled";
+		};
 	};
 
 	ahb2 {
@@ -481,6 +488,24 @@
 			g-np-tx-fifo-size = <512>;
 			g-tx-fifo-size = <16 16 16 128 256 256 512 768>;
 			otg-rev = <0x200>;
+			status = "disabled";
+		};
+
+		audio: audio@134d0000 {
+			compatible = "ingenic,x2000-as";
+			reg = <0x134d0000 0x114>,
+			      <0x134d1000 0x100>,
+			      <0x134d2000 0x28>,
+			      <0x134d4000 0x30>,
+			      <0x134d5000 0x1000>;
+			reg-names = "dma", "fifo", "fmtcov", "dsp", "baic";
+			interrupt-parent = <&intc>;
+			interrupts = <IRQ_AUDIO>;
+			clocks = <&cgu X2000_CLK_AUDIO>,
+				 <&cgu X2000_CLK_I2S0>,
+				 <&cgu X2000_CLK_I2S1>;
+			clock-names = "audio", "baic0", "i2s_tx";
+			#sound-dai-cells = <0>;
 			status = "disabled";
 		};
 	};
