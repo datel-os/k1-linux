@@ -70,4 +70,12 @@ config LOGO_SUPERH_CLUT224
 	depends on SUPERH
 	default y
 
+config LOGO_DATEL_CLUT224
+	bool "224-color Datel OS logo"
+	depends on X2000_CREALITY_K1
+	default y
+	help
+	  The logo of Datel OS, the firmware of the Creality K1, in place of
+	  the penguin.
+
 endif # LOGO
