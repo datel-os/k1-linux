@@ -10,13 +10,14 @@
  * layer keeps them (hardware/). Where this file differs from the tree
  * Datel OS ran on the SDK's 6.6 kernel, a comment says so.
  *
- * Not described: the display (an ST7701 panel on the LCD controller, its
- * backlight) and the touch controller; no driver here knows them.
+ * The display, its panel, the backlight and the touch controller are
+ * described below.
  */
 
 /dts-v1/;
 
 #include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
 
 #include "x2000.dtsi"
 
@@ -140,6 +141,75 @@
 	};
 
 	/*
+	 * The panel's supply, switched by PC21, low for on: the stock panel
+	 * driver drives the line low to power the panel, and it reads low
+	 * while the RTOS shows the boot logo. A fixed regulator's line is
+	 * active low without enable-active-high.
+	 */
+	panel_power: regulator-panel {
+		compatible = "regulator-fixed";
+		regulator-name = "panel_power";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		gpio = <&gpc 21 GPIO_ACTIVE_LOW>;
+		startup-delay-us = <180000>;
+	};
+
+	/*
+	 * The backlight: PC22 switches its supply (high = on), PC0 is its
+	 * dimming input, PWM0 in the stock firmware at 50 kHz. No driver for
+	 * the X2000's PWM is in this tree yet, so PC0 is held high (full
+	 * brightness) and the backlight is either on or off.
+	 */
+	backlight: backlight {
+		compatible = "gpio-backlight";
+		gpios = <&gpc 22 GPIO_ACTIVE_HIGH>;
+		default-on;
+	};
+
+	/*
+	 * The panel's set-up port, a 3-wire 9-bit SPI on plain GPIOs as in the
+	 * stock firmware: SCL PC27, SDA PC28, CS PA2. PB16 would be the
+	 * panel's data out; the driver only writes.
+	 */
+	spi-panel {
+		compatible = "spi-gpio";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		sck-gpios = <&gpc 27 GPIO_ACTIVE_HIGH>;
+		mosi-gpios = <&gpc 28 GPIO_ACTIVE_HIGH>;
+		cs-gpios = <&gpa 2 GPIO_ACTIVE_LOW>;
+		num-chipselects = <1>;
+
+		/*
+		 * The panel the board reports with lcm_id=3. The stock
+		 * firmware has one driver per panel vendor and picks one by
+		 * that number; this tree knows only this one.
+		 */
+		panel@0 {
+			compatible = "creality,k1-panel-tjc", "sitronix,st7701";
+			reg = <0>;
+			spi-max-frequency = <1000000>;
+			VCC-supply = <&panel_power>;
+			IOVCC-supply = <&vcc_3v3>;
+			reset-gpios = <&gpb 29 GPIO_ACTIVE_HIGH>;
+			backlight = <&backlight>;
+
+			/*
+			 * The panel is 480 wide and 800 high; the printer holds
+			 * it on its side, its top edge to the viewer's left.
+			 */
+			rotation = <90>;
+
+			port {
+				panel_in: endpoint {
+					remote-endpoint = <&dpu_out>;
+				};
+			};
+		};
+	};
+
+	/*
 	 * Not nodes, but wired: PA10 (SWDIO), PA6 (SWCLK) and PA7 (reset,
 	 * active low) are the debug port of the mainboard's microcontroller.
 	 * They stay plain GPIOs, for OpenOCD.
@@ -222,6 +292,16 @@
 	pins_uart9: uart9 {
 		function = "uart9";
 		groups = "uart9-data";
+	};
+
+	/*
+	 * PB0 to PB15 (16 data lines), PB24 to PB27 (clock, vsync, hsync, data
+	 * enable), as the stock firmware has them. The 18 and 24 bit groups
+	 * stay out: PB16 is the panel's data out, PB22 and PB23 are I2C2.
+	 */
+	pins_lcd: lcd {
+		function = "lcd";
+		groups = "lcd-tft-8bit", "lcd-tft-16bit";
 	};
 
 	/* PB22, PB23 */
@@ -316,21 +396,63 @@
 	status = "okay";
 };
 
-/*
- * The bus of the touch controller (reset on PA0, interrupt on PA3). The
- * controller has no node: the GT911 node of Datel OS's tree for the 6.6
- * kernel did not answer at 0x14 on the printer this was written with, and
- * nothing would use it without the display.
- */
+/* The bus of the touch controller */
 &i2c4 {
 	clock-frequency = <100000>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pins_i2c4>;
 	status = "okay";
+
+	/*
+	 * GT911, reset on PA0, interrupt on PA3. Its address follows the level
+	 * of the interrupt line while it leaves reset: 0x14 with the line
+	 * high, 0x5d with it low; the driver drives the line to match the
+	 * address given here. Firmware 0x1060 reports 480x800, five points,
+	 * falling edge, which the driver reads from the chip.
+	 */
+	touchscreen@14 {
+		compatible = "goodix,gt911";
+		reg = <0x14>;
+		interrupt-parent = <&gpa>;
+		interrupts = <3 IRQ_TYPE_EDGE_FALLING>;
+		irq-gpios = <&gpa 3 GPIO_ACTIVE_HIGH>;
+		reset-gpios = <&gpa 0 GPIO_ACTIVE_HIGH>;
+		/*
+		 * Positions in the panel's own frame, 480 by 800, as the stock
+		 * firmware reports them: the touch UI turns them together with
+		 * its picture (see the panel's rotation). As the viewer sees
+		 * the screen, the panel's y runs from left to right and its x
+		 * from the bottom to the top.
+		 */
+		touchscreen-size-x = <480>;
+		touchscreen-size-y = <800>;
+	};
 };
 
 &dtrng {
 	status = "okay";
+};
+
+/* PC0, the backlight's dimming input, held high (see the backlight) */
+&gpc {
+	backlight-pwm-hog {
+		gpio-hog;
+		gpios = <0 GPIO_ACTIVE_HIGH>;
+		output-high;
+		line-name = "backlight-pwm";
+	};
+};
+
+&dpu {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pins_lcd>;
+	status = "okay";
+
+	port {
+		dpu_out: endpoint {
+			remote-endpoint = <&panel_in>;
+		};
+	};
 };
 
 /* The eMMC */
