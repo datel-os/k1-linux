@@ -1141,6 +1141,14 @@ config SND_SOC_JZ4770_CODEC
 	  This driver can also be built as a module. If so, the module
 	  will be called snd-soc-jz4770-codec.
 
+config SND_SOC_INGENIC_X2000_ICODEC
+	depends on MACH_INGENIC || COMPILE_TEST
+	depends on OF
+	tristate "Ingenic X2000 internal CODEC"
+	help
+	  Enable playback support for the internal Innosilicon audio CODEC
+	  found in the Ingenic X2000 SoC.
+
 config SND_SOC_DA7210
 	tristate
 	depends on SND_SOC_I2C_AND_SPI
