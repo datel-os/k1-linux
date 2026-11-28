@@ -129,7 +129,6 @@
 		post-power-on-delay-ms = <200>;
 	};
 
-	/* The mainboard's status LED. No LED driver is in k1_defconfig. */
 	leds {
 		compatible = "gpio-leds";
 
@@ -137,6 +136,21 @@
 			label = "sys-led";
 			gpios = <&gpa 13 GPIO_ACTIVE_LOW>;
 			default-state = "on";
+		};
+
+		/*
+		 * The mainboard's active DC piezo buzzer on PC20 (high = on).
+		 * Stock firmware toggles it through soc_icodec's speaker_gpio1
+		 * parameter while aplay runs, though no analog speaker is
+		 * wired to the X2000's internal DAC. Exposed via gpio-leds
+		 * (/sys/class/leds/buzzer/brightness) rather than gpio-beeper
+		 * so it does not claim /dev/input/event0 ahead of the Goodix
+		 * touchscreen.
+		 */
+		buzzer {
+			label = "buzzer";
+			gpios = <&gpc 20 GPIO_ACTIVE_HIGH>;
+			default-state = "off";
 		};
 	};
 
