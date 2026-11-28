@@ -7,7 +7,7 @@
  * here: the two SoCs have the same CPCCR register and the same layout of the
  * PLLs' registers. The PLLs themselves are clocks of this driver's own.
  *
- * Not described: the audio clocks (I2S, PCM, DMIC, S/PDIF), the gates of the
+ * Not described: the PCM, DMIC and S/PDIF audio clocks, the gates of the
  * buses themselves and the power-down bits of the blocks' memories. They stay
  * as the boot loader leaves them.
  */
@@ -17,6 +17,7 @@
 #include <linux/io.h>
 #include <linux/iopoll.h>
 #include <linux/of.h>
+#include <linux/rational.h>
 
 #include <dt-bindings/clock/ingenic,x2000-cgu.h>
 
@@ -39,11 +40,19 @@
 #define CGU_REG_MACCDR		0x54
 #define CGU_REG_MACTXCDR	0x58
 #define CGU_REG_SSICDR		0x5c
+#define CGU_REG_I2S0CDR		0x60
 #define CGU_REG_LPCDR		0x64
 #define CGU_REG_MSC0CDR		0x68
 #define CGU_REG_PWMCDR		0x6c
+#define CGU_REG_I2S0CDR1	0x70
 #define CGU_REG_SFCCDR		0x74
 #define CGU_REG_CIMCDR		0x78
+#define CGU_REG_I2S1CDR		0x7c
+#define CGU_REG_I2S1CDR1	0x80
+#define CGU_REG_I2S2CDR		0x84
+#define CGU_REG_I2S2CDR1	0x88
+#define CGU_REG_I2S3CDR		0x8c
+#define CGU_REG_I2S3CDR1	0xa0
 #define CGU_REG_MSC1CDR		0xa4
 #define CGU_REG_MSC2CDR		0xa8
 #define CGU_REG_CPCSR		0xd4
@@ -72,6 +81,11 @@
 
 /* bits within the MSC0CDR register */
 #define MSC0CDR_BIT21		BIT(21)
+
+/* bits within the I2S[0-3]CDR registers */
+#define I2SCDR_CE		BIT(29)
+#define I2SCDR_M_MASK		GENMASK(28, 20)
+#define I2SCDR_N_MASK		GENMASK(19, 0)
 
 /* bits within the PLL control registers */
 #define PLL_M_MASK		GENMASK(28, 20)
@@ -435,6 +449,150 @@ static const struct clk_ops x2000_pwr_ops = {
 	.is_enabled	= x2000_pwr_is_enabled,
 };
 
+/*
+ * Fractional dividers of the four I2S clocks, in I2S[0-3]CDR:
+ *
+ *	rate = parent * M / N   (9-bit M in 28:20, 20-bit N in 19:0, N >= 2*M)
+ *
+ * Bit 29 is the divider's clock enable; writing zero to the companion
+ * I2S[0-3]CDR1 register lets the hardware derive its internal count from N.
+ */
+
+static void x2000_i2s_div_regs(struct clk_hw *hw, unsigned int *cdr,
+			       unsigned int *cdr1)
+{
+	switch (to_ingenic_clk(hw)->idx) {
+	case X2000_CLK_I2S0_DIV:
+		*cdr = CGU_REG_I2S0CDR;
+		*cdr1 = CGU_REG_I2S0CDR1;
+		break;
+	case X2000_CLK_I2S1_DIV:
+		*cdr = CGU_REG_I2S1CDR;
+		*cdr1 = CGU_REG_I2S1CDR1;
+		break;
+	case X2000_CLK_I2S2_DIV:
+		*cdr = CGU_REG_I2S2CDR;
+		*cdr1 = CGU_REG_I2S2CDR1;
+		break;
+	default:
+		*cdr = CGU_REG_I2S3CDR;
+		*cdr1 = CGU_REG_I2S3CDR1;
+		break;
+	}
+}
+
+static void x2000_i2s_calc(unsigned long rate, unsigned long parent_rate,
+			   unsigned long *pm, unsigned long *pn)
+{
+	unsigned long m, n;
+
+	rational_best_approximation(rate, parent_rate,
+				    FIELD_MAX(I2SCDR_M_MASK),
+				    FIELD_MAX(I2SCDR_N_MASK), &m, &n);
+	if (m == 0)
+		m = 1;
+	if (n < 2 * m)
+		n = 2 * m;
+
+	*pm = m;
+	*pn = n;
+}
+
+static unsigned long
+x2000_i2s_div_recalc_rate(struct clk_hw *hw, unsigned long parent_rate)
+{
+	unsigned int cdr, cdr1;
+	u32 val, m, n;
+
+	x2000_i2s_div_regs(hw, &cdr, &cdr1);
+	val = readl(cgu->base + cdr);
+	m = FIELD_GET(I2SCDR_M_MASK, val);
+	n = FIELD_GET(I2SCDR_N_MASK, val);
+	if (!m || !n)
+		return 0;
+
+	return div_u64((u64)parent_rate * m, n);
+}
+
+static int x2000_i2s_div_determine_rate(struct clk_hw *hw,
+					struct clk_rate_request *req)
+{
+	unsigned long m, n;
+
+	if (!req->best_parent_rate)
+		return -EINVAL;
+
+	x2000_i2s_calc(req->rate, req->best_parent_rate, &m, &n);
+	req->rate = div_u64((u64)req->best_parent_rate * m, n);
+
+	return 0;
+}
+
+static int x2000_i2s_div_set_rate(struct clk_hw *hw, unsigned long rate,
+				  unsigned long parent_rate)
+{
+	unsigned int cdr, cdr1;
+	unsigned long m, n, flags;
+	u32 val;
+
+	if (!parent_rate)
+		return -EINVAL;
+
+	x2000_i2s_div_regs(hw, &cdr, &cdr1);
+	x2000_i2s_calc(rate, parent_rate, &m, &n);
+
+	spin_lock_irqsave(&cgu->lock, flags);
+	val = readl(cgu->base + cdr);
+	val &= ~(I2SCDR_M_MASK | I2SCDR_N_MASK);
+	val |= FIELD_PREP(I2SCDR_M_MASK, m) | FIELD_PREP(I2SCDR_N_MASK, n);
+	writel(val, cgu->base + cdr);
+	writel(0, cgu->base + cdr1);
+	spin_unlock_irqrestore(&cgu->lock, flags);
+
+	return 0;
+}
+
+static int x2000_i2s_div_enable(struct clk_hw *hw)
+{
+	unsigned int cdr, cdr1;
+	unsigned long flags;
+
+	x2000_i2s_div_regs(hw, &cdr, &cdr1);
+	spin_lock_irqsave(&cgu->lock, flags);
+	writel(readl(cgu->base + cdr) | I2SCDR_CE, cgu->base + cdr);
+	spin_unlock_irqrestore(&cgu->lock, flags);
+
+	return 0;
+}
+
+static void x2000_i2s_div_disable(struct clk_hw *hw)
+{
+	unsigned int cdr, cdr1;
+	unsigned long flags;
+
+	x2000_i2s_div_regs(hw, &cdr, &cdr1);
+	spin_lock_irqsave(&cgu->lock, flags);
+	writel(readl(cgu->base + cdr) & ~I2SCDR_CE, cgu->base + cdr);
+	spin_unlock_irqrestore(&cgu->lock, flags);
+}
+
+static int x2000_i2s_div_is_enabled(struct clk_hw *hw)
+{
+	unsigned int cdr, cdr1;
+
+	x2000_i2s_div_regs(hw, &cdr, &cdr1);
+	return !!(readl(cgu->base + cdr) & I2SCDR_CE);
+}
+
+static const struct clk_ops x2000_i2s_div_ops = {
+	.recalc_rate	= x2000_i2s_div_recalc_rate,
+	.determine_rate	= x2000_i2s_div_determine_rate,
+	.set_rate	= x2000_i2s_div_set_rate,
+	.enable		= x2000_i2s_div_enable,
+	.disable	= x2000_i2s_div_disable,
+	.is_enabled	= x2000_i2s_div_is_enabled,
+};
+
 #define X2000_GATE(_name, _parent, _reg, _bit)				\
 	{								\
 		_name, CGU_CLK_GATE,					\
@@ -762,6 +920,75 @@ static const struct ingenic_cgu_clk_info x2000_cgu_clocks[] = {
 	[X2000_CLK_ISP1_PWR] = X2000_PWR("isp1_pwr", X2000_CLK_ISP1),
 	[X2000_CLK_FELIX_PWR] = X2000_PWR("felix_pwr", X2000_CLK_FELIX),
 	[X2000_CLK_HELIX_PWR] = X2000_PWR("helix_pwr", X2000_CLK_HELIX),
+
+	/* I2S audio clocks */
+
+	[X2000_CLK_I2S0_MUX] = {
+		"i2s0_mux", CGU_CLK_MUX,
+		.parents = { X2000_CLK_SCLKA, X2000_CLK_EPLL, -1, -1 },
+		.mux = { CGU_REG_I2S0CDR, 30, 1 },
+	},
+	[X2000_CLK_I2S1_MUX] = {
+		"i2s1_mux", CGU_CLK_MUX,
+		.parents = { X2000_CLK_SCLKA, X2000_CLK_EPLL, -1, -1 },
+		.mux = { CGU_REG_I2S1CDR, 30, 1 },
+	},
+	[X2000_CLK_I2S2_MUX] = {
+		"i2s2_mux", CGU_CLK_MUX,
+		.parents = { X2000_CLK_SCLKA, X2000_CLK_EPLL, -1, -1 },
+		.mux = { CGU_REG_I2S2CDR, 30, 1 },
+	},
+	[X2000_CLK_I2S3_MUX] = {
+		"i2s3_mux", CGU_CLK_MUX,
+		.parents = { X2000_CLK_SCLKA, X2000_CLK_EPLL, -1, -1 },
+		.mux = { CGU_REG_I2S3CDR, 30, 1 },
+	},
+
+	[X2000_CLK_I2S0_DIV] = {
+		"i2s0_div", CGU_CLK_CUSTOM,
+		.parents = { X2000_CLK_I2S0_MUX, -1, -1, -1 },
+		.custom = { &x2000_i2s_div_ops },
+	},
+	[X2000_CLK_I2S1_DIV] = {
+		"i2s1_div", CGU_CLK_CUSTOM,
+		.parents = { X2000_CLK_I2S1_MUX, -1, -1, -1 },
+		.custom = { &x2000_i2s_div_ops },
+	},
+	[X2000_CLK_I2S2_DIV] = {
+		"i2s2_div", CGU_CLK_CUSTOM,
+		.parents = { X2000_CLK_I2S2_MUX, -1, -1, -1 },
+		.custom = { &x2000_i2s_div_ops },
+	},
+	[X2000_CLK_I2S3_DIV] = {
+		"i2s3_div", CGU_CLK_CUSTOM,
+		.parents = { X2000_CLK_I2S3_MUX, -1, -1, -1 },
+		.custom = { &x2000_i2s_div_ops },
+	},
+
+	[X2000_CLK_I2S0] = {
+		"i2s0", CGU_CLK_GATE,
+		.flags = CLK_SET_RATE_PARENT,
+		.parents = { X2000_CLK_I2S0_DIV, -1, -1, -1 },
+		.gate = { CGU_REG_CLKGR1, 8 },
+	},
+	[X2000_CLK_I2S1] = {
+		"i2s1", CGU_CLK_GATE,
+		.flags = CLK_SET_RATE_PARENT,
+		.parents = { X2000_CLK_I2S1_DIV, -1, -1, -1 },
+		.gate = { CGU_REG_CLKGR1, 9 },
+	},
+	[X2000_CLK_I2S2] = {
+		"i2s2", CGU_CLK_GATE,
+		.flags = CLK_SET_RATE_PARENT,
+		.parents = { X2000_CLK_I2S2_DIV, -1, -1, -1 },
+		.gate = { CGU_REG_CLKGR1, 10 },
+	},
+	[X2000_CLK_I2S3] = {
+		"i2s3", CGU_CLK_GATE,
+		.flags = CLK_SET_RATE_PARENT,
+		.parents = { X2000_CLK_I2S3_DIV, -1, -1, -1 },
+		.gate = { CGU_REG_CLKGR1, 11 },
+	},
 };
 
 static void __init x2000_cgu_init(struct device_node *np)

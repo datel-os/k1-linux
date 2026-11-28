@@ -89,6 +89,7 @@ config INGENIC_CGU_X2000
 	bool "Ingenic X2000 CGU driver"
 	default MACH_X2000
 	select INGENIC_CGU_COMMON
+	select RATIONAL
 	help
 	  Support the clocks provided by the CGU hardware on Ingenic X2000
 	  and compatible SoCs.
