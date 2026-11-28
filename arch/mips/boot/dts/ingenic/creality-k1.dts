@@ -210,6 +210,50 @@
 	};
 
 	/*
+	 * The speaker amplifier's enable line, PC20, high for on, with a 30 ms
+	 * settle time as in the stock firmware (speaker_need_delay_ms=30).
+	 * Driving it through a regulator supply of simple-audio-amplifier
+	 * keeps it low whenever no playback stream is open.
+	 */
+	speaker_amp_en: regulator-speaker-amp {
+		compatible = "regulator-fixed";
+		regulator-name = "speaker_amp_en";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		gpio = <&gpc 20 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		startup-delay-us = <30000>;
+	};
+
+	speaker_amp: audio-amplifier {
+		compatible = "simple-audio-amplifier";
+		VCC-supply = <&speaker_amp_en>;
+		sound-name-prefix = "Speaker Amp";
+	};
+
+	sound {
+		compatible = "simple-audio-card";
+		simple-audio-card,name = "Creality K1";
+		simple-audio-card,format = "i2s";
+		simple-audio-card,bitclock-master = <&sound_cpu>;
+		simple-audio-card,frame-master = <&sound_cpu>;
+		simple-audio-card,aux-devs = <&speaker_amp>;
+		simple-audio-card,widgets = "Speaker", "Speaker";
+		simple-audio-card,routing =
+			"Speaker Amp INL", "HPOUTL",
+			"Speaker Amp INR", "HPOUTL",
+			"Speaker", "Speaker Amp OUTL";
+
+		sound_cpu: simple-audio-card,cpu {
+			sound-dai = <&audio>;
+		};
+
+		sound_codec: simple-audio-card,codec {
+			sound-dai = <&icodec>;
+		};
+	};
+
+	/*
 	 * Not nodes, but wired: PA10 (SWDIO), PA6 (SWCLK) and PA7 (reset,
 	 * active low) are the debug port of the mainboard's microcontroller.
 	 * They stay plain GPIOs, for OpenOCD.
@@ -515,5 +559,16 @@
 /* H.264 and JPEG encoder, JPEG decoder: the camera stream and the timelapse */
 &helix {
 	memory-region = <&helix_pool>;
+	status = "okay";
+};
+
+/* Internal audio codec and Audio System v2 playback path */
+&icodec {
+	status = "okay";
+};
+
+&audio {
+	assigned-clocks = <&cgu X2000_CLK_I2S1_MUX>;
+	assigned-clock-parents = <&cgu X2000_CLK_EPLL>;
 	status = "okay";
 };
