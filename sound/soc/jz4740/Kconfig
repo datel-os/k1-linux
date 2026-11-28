@@ -11,4 +11,13 @@ config SND_JZ4740_SOC_I2S
 	  Say Y if you want to use I2S protocol and I2S codec on Ingenic JZ4740
 	  based boards.
 
+config SND_X2000_SOC_AS
+	tristate "SoC Audio playback for Ingenic X2000 Audio System v2"
+	depends on MIPS || COMPILE_TEST
+	depends on HAS_IOMEM
+	help
+	  Say Y to enable playback through the Ingenic X2000 Audio System v2
+	  (AS DMA, FIFO, format converter, DBUS and BAIC0) to the internal
+	  audio codec.
+
 endmenu
